@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Menu,
   Search,
@@ -9,7 +10,6 @@ import {
   LogOut,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,8 +23,10 @@ interface TopbarProps {
   onOpenMobileNav: () => void;
 }
 
-/** Cabeçalho fixo — busca global, status e perfil (Blueprint §12.1). */
+/** Cabeçalho fixo — busca global e perfil (Blueprint §12.1). */
 function Topbar({ onOpenMobileNav }: TopbarProps) {
+  const router = useRouter();
+
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border-subtle bg-background px-4">
       <button
@@ -36,22 +38,30 @@ function Topbar({ onOpenMobileNav }: TopbarProps) {
         <Menu className="size-[18px]" />
       </button>
 
-      <div className="relative w-full max-w-sm">
+      <form
+        className="relative w-full max-w-sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const value = new FormData(e.currentTarget).get("q");
+          const q = typeof value === "string" ? value.trim() : "";
+          router.push(
+            q
+              ? `/opportunities?search=${encodeURIComponent(q)}`
+              : "/opportunities",
+          );
+        }}
+      >
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
         <Input
           type="search"
-          placeholder="Buscar empresa, telefone, cidade..."
+          name="q"
+          placeholder="Buscar empresa por nome..."
           className="pl-9"
           aria-label="Busca global"
         />
-      </div>
+      </form>
 
       <div className="ml-auto flex items-center gap-3">
-        <Badge variant="success" className="hidden sm:inline-flex">
-          <span className="size-1.5 rounded-full bg-success" />
-          Busca concluída
-        </Badge>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button

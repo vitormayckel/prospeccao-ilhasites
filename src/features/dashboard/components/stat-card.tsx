@@ -1,14 +1,25 @@
+import type { LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { StatItem } from "@/features/dashboard/mock-data";
 
-const iconIntent: Record<StatItem["intent"], string> = {
+export type StatIntent = "default" | "accent" | "danger";
+
+export interface StatItem {
+  id: string;
+  label: string;
+  value: string;
+  hint: string;
+  icon: LucideIcon;
+  intent: StatIntent;
+}
+
+const iconIntent: Record<StatIntent, string> = {
   default: "bg-surface-2 text-text-secondary",
   accent: "bg-accent-soft text-accent",
   danger: "bg-danger/12 text-danger",
 };
 
-const valueIntent: Record<StatItem["intent"], string> = {
+const valueIntent: Record<StatIntent, string> = {
   default: "text-text-primary",
   accent: "text-text-primary",
   danger: "text-danger",

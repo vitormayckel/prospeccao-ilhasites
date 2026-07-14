@@ -1,112 +1,158 @@
-import type { AdminClient } from "@/lib/database/supabase-admin";
-import type { UpdateDto } from "@/types/database";
+import type { Db } from "@/lib/database/sql";
 import type {
   CompanyRow,
+  CompanySourceRow,
+  AiAnalysisRow,
+  CompanyDecisionRow,
+  CompanyNoteRow,
+  MessageRow,
+  FollowUpRow,
+  PipelineEventRow,
   PipelineStage,
   Priority,
   ReviewStatus,
 } from "@/types/domain";
 import type { OpportunityFilters } from "@/lib/validation/company";
 
-export interface CompanyDetail {
-  company: CompanyRow;
-  sources: unknown[];
-  analyses: unknown[];
-  decisions: unknown[];
-  notes: unknown[];
-  messages: unknown[];
-  followUps: unknown[];
-  pipelineEvents: unknown[];
+export interface Paginated<T> {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
 }
 
+export interface CompanyDetail {
+  company: CompanyRow;
+  sources: CompanySourceRow[];
+  analyses: AiAnalysisRow[];
+  decisions: CompanyDecisionRow[];
+  notes: CompanyNoteRow[];
+  messages: MessageRow[];
+  followUps: FollowUpRow[];
+  pipelineEvents: PipelineEventRow[];
+}
+
+const PRIORITY_RANK = `case c.priority when 'urgent' then 4 when 'high' then 3 when 'normal' then 2 else 1 end`;
+
+const SORT_SQL: Record<OpportunityFilters["sort"], string> = {
+  priority: PRIORITY_RANK,
+  score: "c.score",
+  name: "c.normalized_name",
+  created_at: "c.created_at",
+};
+
 /** Acesso a `companies` e agregados relacionados. */
-export function createCompaniesRepository(db: AdminClient) {
-  const repo = {
-    async list(filters: OpportunityFilters): Promise<CompanyRow[]> {
-      let query = db
-        .from("companies")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(filters.limit);
+export function createCompaniesRepository(db: Db) {
+  async function findById(id: string): Promise<CompanyRow | null> {
+    const rows = await db.query<CompanyRow>(
+      "select * from companies where id = $1 and deleted_at is null",
+      [id],
+    );
+    return rows[0] ?? null;
+  }
 
-      if (filters.reviewStatus)
-        query = query.eq("review_status", filters.reviewStatus);
-      if (filters.priority) query = query.eq("priority", filters.priority);
-      if (filters.stage) query = query.eq("pipeline_stage", filters.stage);
-      if (filters.city) query = query.ilike("city", `%${filters.city}%`);
-      if (filters.search)
-        query = query.ilike(
-          "normalized_name",
-          `%${filters.search.toLowerCase()}%`,
-        );
+  return {
+    findById,
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data ?? [];
-    },
+    async list(filters: OpportunityFilters): Promise<Paginated<CompanyRow>> {
+      const where: string[] = ["c.deleted_at is null"];
+      const params: unknown[] = [];
 
-    async findById(id: string): Promise<CompanyRow | null> {
-      const { data, error } = await db
-        .from("companies")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (filters.reviewStatus) {
+        params.push(filters.reviewStatus);
+        where.push(`c.review_status = $${params.length}`);
+      }
+      if (filters.priority) {
+        params.push(filters.priority);
+        where.push(`c.priority = $${params.length}`);
+      }
+      if (filters.stage) {
+        params.push(filters.stage);
+        where.push(`c.pipeline_stage = $${params.length}`);
+      }
+      if (filters.city) {
+        params.push(`%${filters.city}%`);
+        where.push(`c.city ilike $${params.length}`);
+      }
+      if (filters.search) {
+        params.push(`%${filters.search.toLowerCase()}%`);
+        where.push(`c.normalized_name ilike $${params.length}`);
+      }
+
+      const whereSql = where.join(" and ");
+      const orderSql = `${SORT_SQL[filters.sort]} ${filters.order === "asc" ? "asc" : "desc"} nulls last, c.created_at desc`;
+
+      const totalRows = await db.query<{ total: number }>(
+        `select count(*)::int as total from companies c where ${whereSql}`,
+        params,
+      );
+      const total = totalRows[0]?.total ?? 0;
+
+      const offset = (filters.page - 1) * filters.pageSize;
+      const rows = await db.query<CompanyRow>(
+        `select c.* from companies c
+         where ${whereSql}
+         order by ${orderSql}
+         limit ${filters.pageSize} offset ${offset}`,
+        params,
+      );
+
+      return {
+        rows,
+        total,
+        page: filters.page,
+        pageSize: filters.pageSize,
+        pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
+      };
     },
 
     /** Detalhe consolidado com todas as relações (Blueprint RF-16). */
     async getDetail(id: string): Promise<CompanyDetail | null> {
-      const company = await repo.findById(id);
+      const company = await findById(id);
       if (!company) return null;
 
       const [sources, analyses, decisions, notes, messages, followUps, events] =
         await Promise.all([
-          db.from("company_sources").select("*").eq("company_id", id),
-          db
-            .from("ai_analyses")
-            .select("*")
-            .eq("company_id", id)
-            .order("created_at", { ascending: false }),
-          db
-            .from("company_decisions")
-            .select("*")
-            .eq("company_id", id)
-            .order("created_at", { ascending: false }),
-          db
-            .from("company_notes")
-            .select("*")
-            .eq("company_id", id)
-            .is("deleted_at", null)
-            .order("created_at", { ascending: false }),
-          db
-            .from("messages")
-            .select("*")
-            .eq("company_id", id)
-            .order("created_at", { ascending: false }),
-          db
-            .from("follow_ups")
-            .select("*")
-            .eq("company_id", id)
-            .is("deleted_at", null)
-            .order("due_at", { ascending: true }),
-          db
-            .from("pipeline_events")
-            .select("*")
-            .eq("company_id", id)
-            .order("created_at", { ascending: false }),
+          db.query<CompanySourceRow>(
+            "select * from company_sources where company_id = $1 order by collected_at desc",
+            [id],
+          ),
+          db.query<AiAnalysisRow>(
+            "select * from ai_analyses where company_id = $1 order by created_at desc",
+            [id],
+          ),
+          db.query<CompanyDecisionRow>(
+            "select * from company_decisions where company_id = $1 order by created_at desc",
+            [id],
+          ),
+          db.query<CompanyNoteRow>(
+            "select * from company_notes where company_id = $1 and deleted_at is null order by created_at desc",
+            [id],
+          ),
+          db.query<MessageRow>(
+            "select * from messages where company_id = $1 order by created_at desc",
+            [id],
+          ),
+          db.query<FollowUpRow>(
+            "select * from follow_ups where company_id = $1 and deleted_at is null order by due_at asc",
+            [id],
+          ),
+          db.query<PipelineEventRow>(
+            "select * from pipeline_events where company_id = $1 order by created_at desc",
+            [id],
+          ),
         ]);
 
       return {
         company,
-        sources: sources.data ?? [],
-        analyses: analyses.data ?? [],
-        decisions: decisions.data ?? [],
-        notes: notes.data ?? [],
-        messages: messages.data ?? [],
-        followUps: followUps.data ?? [],
-        pipelineEvents: events.data ?? [],
+        sources,
+        analyses,
+        decisions,
+        notes,
+        messages,
+        followUps,
+        pipelineEvents: events,
       };
     },
 
@@ -119,38 +165,40 @@ export function createCompaniesRepository(db: AdminClient) {
         score?: number | null;
       },
     ): Promise<CompanyRow> {
-      const patch: UpdateDto<"companies"> = {};
-      if (values.reviewStatus !== undefined)
-        patch.review_status = values.reviewStatus;
-      if (values.pipelineStage !== undefined)
-        patch.pipeline_stage = values.pipelineStage;
-      if (values.nextActionAt !== undefined)
-        patch.next_action_at = values.nextActionAt;
-      if (values.score !== undefined) patch.score = values.score;
-
-      const { data, error } = await db
-        .from("companies")
-        .update(patch)
-        .eq("id", id)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
+      const sets: string[] = ["updated_at = now()"];
+      const params: unknown[] = [];
+      if (values.reviewStatus !== undefined) {
+        params.push(values.reviewStatus);
+        sets.push(`review_status = $${params.length}`);
+      }
+      if (values.pipelineStage !== undefined) {
+        params.push(values.pipelineStage);
+        sets.push(`pipeline_stage = $${params.length}`);
+      }
+      if (values.nextActionAt !== undefined) {
+        params.push(values.nextActionAt);
+        sets.push(`next_action_at = $${params.length}`);
+      }
+      if (values.score !== undefined) {
+        params.push(values.score);
+        sets.push(`score = $${params.length}`);
+      }
+      params.push(id);
+      const rows = await db.query<CompanyRow>(
+        `update companies set ${sets.join(", ")} where id = $${params.length} returning *`,
+        params,
+      );
+      return rows[0]!;
     },
 
     async setPriority(id: string, priority: Priority): Promise<CompanyRow> {
-      const { data, error } = await db
-        .from("companies")
-        .update({ priority })
-        .eq("id", id)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
+      const rows = await db.query<CompanyRow>(
+        "update companies set priority = $1, updated_at = now() where id = $2 returning *",
+        [priority, id],
+      );
+      return rows[0]!;
     },
   };
-
-  return repo;
 }
 
 export type CompaniesRepository = ReturnType<typeof createCompaniesRepository>;

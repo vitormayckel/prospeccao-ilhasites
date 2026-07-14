@@ -1,4 +1,4 @@
-import type { AdminClient } from "@/lib/database/supabase-admin";
+import type { Db } from "@/lib/database/sql";
 import type {
   SearchProfileRow,
   SearchProfileLocationRow,
@@ -6,94 +6,100 @@ import type {
 } from "@/types/domain";
 import type { SearchProfileInput } from "@/lib/validation/search-profile";
 
+export interface SearchProfileListItem extends SearchProfileRow {
+  cities: string[];
+  category_count: number;
+}
+
 export interface SearchProfileDetail {
   profile: SearchProfileRow;
   locations: SearchProfileLocationRow[];
   categories: SearchProfileCategoryRow[];
 }
 
-export function createSearchProfilesRepository(db: AdminClient) {
+export function createSearchProfilesRepository(db: Db) {
   return {
-    async list(): Promise<SearchProfileRow[]> {
-      const { data, error } = await db
-        .from("search_profiles")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+    async list(): Promise<SearchProfileListItem[]> {
+      return db.query<SearchProfileListItem>(
+        `select sp.*,
+            coalesce(
+              array_agg(distinct l.city) filter (where l.city is not null),
+              '{}'
+            ) as cities,
+            (select count(*)::int from search_profile_categories x
+               where x.search_profile_id = sp.id and x.active) as category_count
+          from search_profiles sp
+          left join search_profile_locations l on l.search_profile_id = sp.id
+          where sp.deleted_at is null
+          group by sp.id
+          order by sp.created_at desc`,
+      );
     },
 
     async getDetail(id: string): Promise<SearchProfileDetail | null> {
-      const { data: profile, error } = await db
-        .from("search_profiles")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-      if (error) throw error;
+      const profiles = await db.query<SearchProfileRow>(
+        "select * from search_profiles where id = $1 and deleted_at is null",
+        [id],
+      );
+      const profile = profiles[0];
       if (!profile) return null;
 
       const [locations, categories] = await Promise.all([
-        db
-          .from("search_profile_locations")
-          .select("*")
-          .eq("search_profile_id", id),
-        db
-          .from("search_profile_categories")
-          .select("*")
-          .eq("search_profile_id", id),
+        db.query<SearchProfileLocationRow>(
+          "select * from search_profile_locations where search_profile_id = $1",
+          [id],
+        ),
+        db.query<SearchProfileCategoryRow>(
+          "select * from search_profile_categories where search_profile_id = $1",
+          [id],
+        ),
       ]);
-      return {
-        profile,
-        locations: locations.data ?? [],
-        categories: categories.data ?? [],
-      };
+      return { profile, locations, categories };
     },
 
-    /** Cria perfil com localizações e categorias (transação lógica). */
     async create(input: SearchProfileInput): Promise<SearchProfileRow> {
-      const { data: profile, error } = await db
-        .from("search_profiles")
-        .insert({
-          name: input.name,
-          status: input.status,
-          weekdays: input.weekdays,
-          run_time: input.runTime,
-          timezone: input.timezone,
-          daily_limit: input.dailyLimit,
-          radius_meters: input.radiusMeters ?? null,
-          min_rating: input.minRating ?? null,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
+      const created = await db.query<SearchProfileRow>(
+        `insert into search_profiles
+           (name, status, weekdays, run_time, timezone, daily_limit, radius_meters, min_rating)
+         values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+        [
+          input.name,
+          input.status,
+          input.weekdays,
+          input.runTime,
+          input.timezone,
+          input.dailyLimit,
+          input.radiusMeters ?? null,
+          input.minRating ?? null,
+        ],
+      );
+      const profile = created[0]!;
 
-      if (input.locations.length) {
-        const { error: locErr } = await db
-          .from("search_profile_locations")
-          .insert(
-            input.locations.map((l) => ({
-              search_profile_id: profile.id,
-              city: l.city,
-              state: l.state,
-              country_code: l.countryCode,
-            })),
-          );
-        if (locErr) throw locErr;
+      for (const loc of input.locations) {
+        await db.query(
+          `insert into search_profile_locations (search_profile_id, city, state, country_code)
+           values ($1, $2, $3, $4)`,
+          [profile.id, loc.city, loc.state, loc.countryCode],
+        );
       }
-      if (input.categories.length) {
-        const { error: catErr } = await db
-          .from("search_profile_categories")
-          .insert(
-            input.categories.map((c) => ({
-              search_profile_id: profile.id,
-              label: c.label,
-              provider_category: c.providerCategory ?? null,
-            })),
-          );
-        if (catErr) throw catErr;
+      for (const cat of input.categories) {
+        await db.query(
+          `insert into search_profile_categories (search_profile_id, label, provider_category)
+           values ($1, $2, $3)`,
+          [profile.id, cat.label, cat.providerCategory ?? null],
+        );
       }
       return profile;
+    },
+
+    async setStatus(
+      id: string,
+      status: SearchProfileRow["status"],
+    ): Promise<void> {
+      await db.query(
+        "update search_profiles set status = $1, updated_at = now() where id = $2",
+        [status, id],
+      );
     },
   };
 }

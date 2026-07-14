@@ -18,6 +18,9 @@ next-env.d.ts
 *.log
 npm-debug.log*
 
+# local database (PGlite)
+.pglite/
+
 # misc
 .DS_Store
 *.tsbuildinfo

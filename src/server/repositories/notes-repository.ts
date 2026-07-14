@@ -1,32 +1,26 @@
-import type { AdminClient } from "@/lib/database/supabase-admin";
+import type { Db } from "@/lib/database/sql";
 import type { CompanyNoteRow } from "@/types/domain";
 
-export function createNotesRepository(db: AdminClient) {
+export function createNotesRepository(db: Db) {
   return {
     async create(input: {
       companyId: string;
       content: string;
       profileId?: string | null;
     }): Promise<CompanyNoteRow> {
-      const { data, error } = await db
-        .from("company_notes")
-        .insert({
-          company_id: input.companyId,
-          content: input.content,
-          profile_id: input.profileId ?? null,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
+      const rows = await db.query<CompanyNoteRow>(
+        `insert into company_notes (company_id, content, profile_id)
+         values ($1, $2, $3) returning *`,
+        [input.companyId, input.content, input.profileId ?? null],
+      );
+      return rows[0]!;
     },
 
     async softDelete(id: string): Promise<void> {
-      const { error } = await db
-        .from("company_notes")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      await db.query(
+        "update company_notes set deleted_at = now(), updated_at = now() where id = $1",
+        [id],
+      );
     },
   };
 }

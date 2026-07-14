@@ -1,4 +1,4 @@
-import type { AdminClient } from "@/lib/database/supabase-admin";
+import type { Db } from "@/lib/database/sql";
 import type {
   CompanyDecisionRow,
   DecisionType,
@@ -16,35 +16,26 @@ export interface AddDecisionInput {
   newStatus?: ReviewStatus | null;
 }
 
-export function createDecisionsRepository(db: AdminClient) {
+export function createDecisionsRepository(db: Db) {
   return {
     async add(input: AddDecisionInput): Promise<CompanyDecisionRow> {
-      const { data, error } = await db
-        .from("company_decisions")
-        .insert({
-          company_id: input.companyId,
-          profile_id: input.profileId ?? null,
-          decision: input.decision,
-          reason: input.reason ?? null,
-          notes: input.notes ?? null,
-          snoozed_until: input.snoozedUntil ?? null,
-          previous_status: input.previousStatus ?? null,
-          new_status: input.newStatus ?? null,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
-    },
-
-    async listByCompany(companyId: string): Promise<CompanyDecisionRow[]> {
-      const { data, error } = await db
-        .from("company_decisions")
-        .select("*")
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      const rows = await db.query<CompanyDecisionRow>(
+        `insert into company_decisions
+           (company_id, profile_id, decision, reason, notes, snoozed_until, previous_status, new_status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         returning *`,
+        [
+          input.companyId,
+          input.profileId ?? null,
+          input.decision,
+          input.reason ?? null,
+          input.notes ?? null,
+          input.snoozedUntil ?? null,
+          input.previousStatus ?? null,
+          input.newStatus ?? null,
+        ],
+      );
+      return rows[0]!;
     },
   };
 }

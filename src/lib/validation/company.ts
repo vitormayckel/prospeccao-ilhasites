@@ -44,7 +44,15 @@ export const createNoteInputSchema = z.object({
 });
 export type CreateNoteInput = z.infer<typeof createNoteInputSchema>;
 
-/** Filtros da fila de oportunidades (Blueprint RF-17). */
+/** Filtros, ordenação e paginação da fila de oportunidades (Blueprint RF-17). */
+export const OPPORTUNITY_SORTS = [
+  "priority",
+  "score",
+  "name",
+  "created_at",
+] as const;
+export type OpportunitySort = (typeof OPPORTUNITY_SORTS)[number];
+
 export const opportunityFiltersSchema = z.object({
   search: z.string().trim().max(120).optional(),
   city: z.string().max(120).optional(),
@@ -53,7 +61,9 @@ export const opportunityFiltersSchema = z.object({
     .optional(),
   priority: priorityEnum.optional(),
   stage: pipelineStageEnum.optional(),
-  limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  sort: z.enum(OPPORTUNITY_SORTS).default("priority"),
+  order: z.enum(["asc", "desc"]).default("desc"),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type OpportunityFilters = z.infer<typeof opportunityFiltersSchema>;

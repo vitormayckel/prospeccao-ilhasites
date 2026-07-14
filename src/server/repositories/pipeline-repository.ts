@@ -1,7 +1,11 @@
-import type { AdminClient } from "@/lib/database/supabase-admin";
-import type { PipelineEventRow, PipelineStage } from "@/types/domain";
+import type { Db } from "@/lib/database/sql";
+import type {
+  CompanyRow,
+  PipelineEventRow,
+  PipelineStage,
+} from "@/types/domain";
 
-export function createPipelineRepository(db: AdminClient) {
+export function createPipelineRepository(db: Db) {
   return {
     async addEvent(input: {
       companyId: string;
@@ -10,29 +14,29 @@ export function createPipelineRepository(db: AdminClient) {
       reason?: string | null;
       profileId?: string | null;
     }): Promise<PipelineEventRow> {
-      const { data, error } = await db
-        .from("pipeline_events")
-        .insert({
-          company_id: input.companyId,
-          from_stage: input.fromStage,
-          to_stage: input.toStage,
-          reason: input.reason ?? null,
-          profile_id: input.profileId ?? null,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data;
+      const rows = await db.query<PipelineEventRow>(
+        `insert into pipeline_events (company_id, from_stage, to_stage, reason, profile_id)
+         values ($1, $2, $3, $4, $5) returning *`,
+        [
+          input.companyId,
+          input.fromStage,
+          input.toStage,
+          input.reason ?? null,
+          input.profileId ?? null,
+        ],
+      );
+      return rows[0]!;
     },
 
-    async listByCompany(companyId: string): Promise<PipelineEventRow[]> {
-      const { data, error } = await db
-        .from("pipeline_events")
-        .select("*")
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+    /** Empresas agrupadas por estágio para o quadro Kanban (RF-14). */
+    async board(): Promise<CompanyRow[]> {
+      return db.query<CompanyRow>(
+        `select * from companies
+         where deleted_at is null and review_status = 'approved'
+         order by
+           case priority when 'urgent' then 4 when 'high' then 3 when 'normal' then 2 else 1 end desc,
+           updated_at desc`,
+      );
     },
   };
 }

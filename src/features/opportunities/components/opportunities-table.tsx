@@ -1,4 +1,5 @@
-import { MoreHorizontal, Building2 } from "lucide-react";
+import Link from "next/link";
+import { Building2 } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -7,44 +8,25 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
 import { ScoreBadge } from "@/features/opportunities/components/score-badge";
+import { RowActions } from "@/features/opportunities/components/row-actions";
 import {
   priorityLabel,
-  statusLabel,
-  type OpportunityRow,
-  type Priority,
-  type ReviewStatus,
-} from "@/features/opportunities/mock-data";
+  priorityVariant,
+  reviewStatusLabel,
+  reviewStatusDot,
+} from "@/features/opportunities/labels";
+import type { CompanyRow } from "@/types/domain";
 
-const priorityVariant: Record<Priority, BadgeProps["variant"]> = {
-  low: "neutral",
-  normal: "outline",
-  high: "warning",
-  urgent: "danger",
-};
-
-const statusDot: Record<ReviewStatus, string> = {
-  pending_review: "bg-info",
-  approved: "bg-success",
-  snoozed: "bg-warning",
-  rejected: "bg-text-muted",
-};
-
-function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
+export function OpportunitiesTable({ rows }: { rows: CompanyRow[] }) {
   if (rows.length === 0) {
     return (
       <EmptyState
         icon={Building2}
-        title="Nenhuma empresa nesta aba"
-        description="Quando houver empresas neste estado, elas aparecerão aqui."
+        title="Nenhuma empresa encontrada"
+        description="Ajuste os filtros ou aguarde a próxima busca para ver empresas aqui."
       />
     );
   }
@@ -67,12 +49,21 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
           {rows.map((row) => (
             <TableRow key={row.id} className="group">
               <TableCell className="font-medium text-text-primary">
-                {row.name}
+                <Link
+                  href={`/opportunities/${row.id}`}
+                  className="hover:text-accent"
+                >
+                  {row.name}
+                </Link>
               </TableCell>
-              <TableCell>{row.city}</TableCell>
-              <TableCell>{row.category}</TableCell>
+              <TableCell>{row.city ?? "—"}</TableCell>
+              <TableCell>{row.primary_category ?? "—"}</TableCell>
               <TableCell>
-                <ScoreBadge score={row.score} />
+                {row.score === null ? (
+                  <span className="text-text-muted">—</span>
+                ) : (
+                  <ScoreBadge score={row.score} />
+                )}
               </TableCell>
               <TableCell>
                 <Badge variant={priorityVariant[row.priority]}>
@@ -82,29 +73,16 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
               <TableCell>
                 <span className="inline-flex items-center gap-2 text-text-secondary">
                   <span
-                    className={`size-1.5 rounded-full ${statusDot[row.status]}`}
+                    className={`size-1.5 rounded-full ${reviewStatusDot[row.review_status]}`}
                   />
-                  {statusLabel[row.status]}
+                  {reviewStatusLabel[row.review_status]}
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Ações"
-                      className="focus-visible:ring-accent/40 flex size-8 items-center justify-center rounded-control text-text-muted opacity-0 transition-all hover:bg-surface-2 hover:text-text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover:opacity-100 data-[state=open]:opacity-100"
-                    >
-                      <MoreHorizontal className="size-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Ver detalhes</DropdownMenuItem>
-                    <DropdownMenuItem>Aprovar</DropdownMenuItem>
-                    <DropdownMenuItem>Adiar</DropdownMenuItem>
-                    <DropdownMenuItem>Rejeitar</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowActions
+                  companyId={row.id}
+                  reviewStatus={row.review_status}
+                />
               </TableCell>
             </TableRow>
           ))}
@@ -113,5 +91,3 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
     </div>
   );
 }
-
-export { OpportunitiesTable };

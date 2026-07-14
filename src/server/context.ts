@@ -1,5 +1,5 @@
 import "server-only";
-import { createSupabaseAdminClient } from "@/lib/database/supabase-admin";
+import { getDb } from "@/lib/database";
 import { createCompaniesRepository } from "@/server/repositories/companies-repository";
 import { createDecisionsRepository } from "@/server/repositories/decisions-repository";
 import { createPipelineRepository } from "@/server/repositories/pipeline-repository";
@@ -8,15 +8,21 @@ import { createFollowUpsRepository } from "@/server/repositories/follow-ups-repo
 import { createTemplatesRepository } from "@/server/repositories/templates-repository";
 import { createSearchProfilesRepository } from "@/server/repositories/search-profiles-repository";
 import { createDashboardRepository } from "@/server/repositories/dashboard-repository";
+import { createMessagesRepository } from "@/server/repositories/messages-repository";
+import { createIntegrationsRepository } from "@/server/repositories/integrations-repository";
+import { createProfilesRepository } from "@/server/repositories/profiles-repository";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 
 /**
- * Composition root do servidor: instancia client, repositories e services.
- * Ponto único de acesso ao domínio a partir de Server Components / Actions.
+ * Composition root do servidor: resolve o banco e instancia
+ * repositories e services. Ponto único de acesso ao domínio a partir
+ * de Server Components e Server Actions.
  */
-export function createServerContext(options?: { actorId?: string | null }) {
-  const db = createSupabaseAdminClient();
+export async function createServerContext(options?: {
+  actorId?: string | null;
+}) {
+  const db = await getDb();
 
   const companies = createCompaniesRepository(db);
   const decisions = createDecisionsRepository(db);
@@ -26,6 +32,9 @@ export function createServerContext(options?: { actorId?: string | null }) {
   const templates = createTemplatesRepository(db);
   const searchProfiles = createSearchProfilesRepository(db);
   const dashboard = createDashboardRepository(db);
+  const messages = createMessagesRepository(db);
+  const integrations = createIntegrationsRepository(db);
+  const profiles = createProfilesRepository(db);
 
   const review = createReviewService({
     companies,
@@ -47,6 +56,9 @@ export function createServerContext(options?: { actorId?: string | null }) {
       templates,
       searchProfiles,
       dashboard,
+      messages,
+      integrations,
+      profiles,
     },
     services: {
       review,
@@ -55,4 +67,4 @@ export function createServerContext(options?: { actorId?: string | null }) {
   };
 }
 
-export type ServerContext = ReturnType<typeof createServerContext>;
+export type ServerContext = Awaited<ReturnType<typeof createServerContext>>;
