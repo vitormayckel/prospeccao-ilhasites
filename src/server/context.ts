@@ -11,8 +11,10 @@ import { createDashboardRepository } from "@/server/repositories/dashboard-repos
 import { createMessagesRepository } from "@/server/repositories/messages-repository";
 import { createIntegrationsRepository } from "@/server/repositories/integrations-repository";
 import { createProfilesRepository } from "@/server/repositories/profiles-repository";
+import { createCollectionRepository } from "@/server/repositories/collection-repository";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
+import { createCollectionService } from "@/server/services/collection-service";
 
 /**
  * Composition root do servidor: resolve o banco e instancia
@@ -35,6 +37,7 @@ export async function createServerContext(options?: {
   const messages = createMessagesRepository(db);
   const integrations = createIntegrationsRepository(db);
   const profiles = createProfilesRepository(db);
+  const collection = createCollectionRepository(db);
 
   const review = createReviewService({
     companies,
@@ -44,6 +47,10 @@ export async function createServerContext(options?: {
     actorId: options?.actorId ?? null,
   });
   const pipelineService = createPipelineService({ companies, pipeline });
+  const collectionService = createCollectionService({
+    searchProfiles,
+    collection,
+  });
 
   return {
     db,
@@ -59,10 +66,12 @@ export async function createServerContext(options?: {
       messages,
       integrations,
       profiles,
+      collection,
     },
     services: {
       review,
       pipeline: pipelineService,
+      collection: collectionService,
     },
   };
 }

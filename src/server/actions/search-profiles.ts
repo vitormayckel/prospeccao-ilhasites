@@ -42,6 +42,87 @@ export async function createSearchProfileAction(
   }
 }
 
+export interface RunSearchActionResult extends ActionResult {
+  summary?: {
+    status: string;
+    resultsSeen: number;
+    newCompanies: number;
+    duplicates: number;
+    suppressed: number;
+    failedItems: number;
+    reusedExistingRun: boolean;
+  };
+}
+
+/** Executa a coleta de um perfil agora (RF-03 "Executar agora"). */
+export async function runSearchAction(
+  profileId: string,
+): Promise<RunSearchActionResult> {
+  try {
+    const { services } = await createServerContext();
+    const result = await services.collection.runSearch({
+      profileId,
+      trigger: "manual",
+    });
+    revalidatePath("/settings/searches");
+    revalidatePath(`/settings/searches/${profileId}`);
+    revalidatePath("/opportunities");
+    revalidatePath("/");
+    if (result.error) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      summary: {
+        status: result.status,
+        resultsSeen: result.resultsSeen,
+        newCompanies: result.newCompanies,
+        duplicates: result.duplicates,
+        suppressed: result.suppressed,
+        failedItems: result.failedItems,
+        reusedExistingRun: result.reusedExistingRun,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "Erro ao executar a coleta.",
+    };
+  }
+}
+
+/** Simula a coleta sem persistir ("Testar configuração", Blueprint §12.6). */
+export async function testSearchProfileAction(
+  profileId: string,
+): Promise<RunSearchActionResult> {
+  try {
+    const { services } = await createServerContext();
+    const result = await services.collection.runSearch({
+      profileId,
+      trigger: "manual",
+      dryRun: true,
+    });
+    if (result.error) return { ok: false, error: result.error };
+    return {
+      ok: true,
+      summary: {
+        status: result.status,
+        resultsSeen: result.resultsSeen,
+        newCompanies: result.newCompanies,
+        duplicates: result.duplicates,
+        suppressed: result.suppressed,
+        failedItems: result.failedItems,
+        reusedExistingRun: result.reusedExistingRun,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "Erro ao testar o perfil.",
+    };
+  }
+}
+
 export async function toggleSearchProfileStatusAction(
   id: string,
   current: SearchProfileStatus,

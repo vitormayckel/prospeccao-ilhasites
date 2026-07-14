@@ -101,6 +101,14 @@ export function createSearchProfilesRepository(db: Db) {
         [status, id],
       );
     },
+
+    /** Marca a última execução do perfil (RF-03). */
+    async markRan(id: string): Promise<void> {
+      await db.query(
+        "update search_profiles set last_run_at = now(), updated_at = now() where id = $1",
+        [id],
+      );
+    },
   };
 }
 

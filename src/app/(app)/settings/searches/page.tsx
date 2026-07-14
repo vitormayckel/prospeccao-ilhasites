@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreateSearchProfileDialog } from "@/features/searches/components/create-search-profile-dialog";
 import { ProfileStatusToggle } from "@/features/searches/components/profile-status-toggle";
+import { RunSearchButton } from "@/features/searches/components/run-search-button";
 import { formatDate } from "@/lib/format";
 import { createServerContext } from "@/server/context";
 
@@ -40,9 +42,12 @@ export default async function SettingsSearchesPage() {
               <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-text-primary">
+                    <Link
+                      href={`/settings/searches/${p.id}`}
+                      className="text-sm font-medium text-text-primary transition-colors hover:text-accent"
+                    >
                       {p.name}
-                    </span>
+                    </Link>
                     <Badge
                       variant={p.status === "active" ? "success" : "neutral"}
                     >
@@ -58,7 +63,10 @@ export default async function SettingsSearchesPage() {
                     Última execução: {formatDate(p.last_run_at)}
                   </p>
                 </div>
-                <ProfileStatusToggle id={p.id} status={p.status} />
+                <div className="flex items-center gap-2">
+                  <ProfileStatusToggle id={p.id} status={p.status} />
+                  <RunSearchButton profileId={p.id} mode="run" />
+                </div>
               </CardContent>
             </Card>
           ))}
