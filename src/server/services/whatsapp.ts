@@ -4,9 +4,29 @@
 // =====================================================================
 
 import { ALLOWED_TEMPLATE_VARIABLES } from "@/lib/validation/template";
+import type { CompanyRow } from "@/types/domain";
+
+// Reexporta os utilitários puros de link (fonte única em @/lib/whatsapp-link).
+export { toDialableDigits, buildWhatsappDeepLink } from "@/lib/whatsapp-link";
 
 export type TemplateVariable = (typeof ALLOWED_TEMPLATE_VARIABLES)[number];
 export type TemplateValues = Partial<Record<TemplateVariable, string>>;
+
+/**
+ * Deriva os valores das variáveis a partir da empresa (Blueprint §17.1).
+ * `first_name` fica em aberto para o operador preencher (não temos contato
+ * nominal). `website_reference` descreve a presença digital observada.
+ */
+export function buildTemplateValues(company: CompanyRow): TemplateValues {
+  return {
+    company_name: company.name,
+    city: company.city ?? undefined,
+    category: company.primary_category ?? undefined,
+    website_reference: company.website_url
+      ? company.website_url
+      : "não localizei um site próprio da empresa",
+  };
+}
 
 export interface ResolveResult {
   content: string;
@@ -47,32 +67,4 @@ export function resolveTemplate(
     missing: [...missing],
     unknown: [...unknown],
   };
-}
-
-/** Normaliza um telefone para apenas dígitos com DDI (Brasil por padrão). */
-export function toDialableDigits(phone: string): string | null {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-  // já tem DDI 55
-  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
-    return digits;
-  }
-  // número nacional (DDD + número) → prefixa 55
-  if (digits.length === 10 || digits.length === 11) {
-    return "55" + digits;
-  }
-  return null;
-}
-
-/**
- * Monta o deep link wa.me (Blueprint §17.2). Retorna null se o telefone
- * não puder ser normalizado — nesse caso a abertura deve ser bloqueada.
- */
-export function buildWhatsappDeepLink(
-  phone: string,
-  message: string,
-): string | null {
-  const digits = toDialableDigits(phone);
-  if (!digits) return null;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }

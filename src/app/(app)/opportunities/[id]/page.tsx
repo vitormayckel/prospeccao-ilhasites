@@ -12,6 +12,10 @@ import { AddFollowUpForm } from "@/features/opportunities/components/detail/add-
 import { AnalyzeButton } from "@/features/opportunities/components/detail/analyze-button";
 import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
 import {
+  MessageComposer,
+  type ComposerTemplate,
+} from "@/features/messages/components/message-composer";
+import {
   priorityLabel,
   priorityVariant,
   reviewStatusLabel,
@@ -19,6 +23,10 @@ import {
 } from "@/features/opportunities/labels";
 import { formatDateTime, formatDueLabel } from "@/lib/format";
 import { createServerContext } from "@/server/context";
+import {
+  resolveTemplate,
+  buildTemplateValues,
+} from "@/server/services/whatsapp";
 import type { ProspectAnalysis } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -59,13 +67,33 @@ export default async function OpportunityDetailPage({
   const detail = await repositories.companies.getDetail(params.id);
   if (!detail) notFound();
 
-  const { company, analyses, notes, followUps, pipelineEvents } = detail;
+  const { company, analyses, notes, followUps, pipelineEvents, messages } =
+    detail;
   const analysis = analyses.find((a) => a.status === "completed");
   const output = analysis?.output as ProspectAnalysis | null | undefined;
   const lastAnalysis = analyses[0];
   const analysisFailed =
     company.review_status === "analysis_failed" ||
     lastAnalysis?.status === "failed";
+
+  // Templates resolvidos para o compositor de mensagem (RF-11).
+  const templateRows = await repositories.templates.list();
+  const values = buildTemplateValues(company);
+  const composerTemplates: ComposerTemplate[] = templateRows
+    .filter((t) => t.active)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      resolvedContent: resolveTemplate(t.content, values).content,
+    }));
+  const lastMessage = messages[0];
+  const messageStatusLabel: Record<string, string> = {
+    draft: "rascunho",
+    opened: "aberta (não confirmada)",
+    confirmed_sent: "enviada",
+    not_sent: "não enviada",
+  };
 
   return (
     <div className="space-y-8">
@@ -212,6 +240,38 @@ export default async function OpportunityDetailPage({
                   label="Avaliação"
                   value={`${company.rating} (${company.reviews_count ?? 0})`}
                 />
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Abordagem (WhatsApp manual) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Abordagem</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {company.phone_e164 || company.phone_raw ? (
+                <MessageComposer
+                  companyId={company.id}
+                  companyName={company.name}
+                  phoneE164={company.phone_e164}
+                  phoneDisplay={company.phone_raw ?? company.phone_e164}
+                  templates={composerTemplates}
+                />
+              ) : (
+                <p className="text-sm text-text-muted">
+                  Sem telefone para abordagem por WhatsApp.
+                </p>
+              )}
+              {lastMessage ? (
+                <p className="text-xs text-text-muted">
+                  Última mensagem: {messageStatusLabel[lastMessage.status]} ·{" "}
+                  {formatDateTime(
+                    lastMessage.sent_at ??
+                      lastMessage.opened_at ??
+                      lastMessage.created_at,
+                  )}
+                </p>
               ) : null}
             </CardContent>
           </Card>

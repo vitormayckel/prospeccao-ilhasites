@@ -17,6 +17,7 @@ import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 import { createCollectionService } from "@/server/services/collection-service";
 import { createAnalysisService } from "@/server/services/analysis-service";
+import { createMessagingService } from "@/server/services/messaging-service";
 
 /**
  * Composition root do servidor: resolve o banco e instancia
@@ -55,6 +56,11 @@ export async function createServerContext(options?: {
     collection,
   });
   const analysisService = createAnalysisService({ companies, aiAnalyses });
+  const messagingService = createMessagingService({
+    messages,
+    companies,
+    pipeline: pipelineService,
+  });
 
   return {
     db,
@@ -78,6 +84,7 @@ export async function createServerContext(options?: {
       pipeline: pipelineService,
       collection: collectionService,
       analysis: analysisService,
+      messaging: messagingService,
     },
   };
 }
