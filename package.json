@@ -11,7 +11,9 @@
     "type-check": "tsc --noEmit",
     "db:generate-seed": "node scripts/generate-seed.mjs",
     "db:validate": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs",
-    "collection:validate": "node scripts/generate-seed.mjs && node scripts/collection-validate.mjs"
+    "collection:validate": "node scripts/generate-seed.mjs && node scripts/collection-validate.mjs",
+    "analysis:validate": "node scripts/generate-seed.mjs && node scripts/analysis-validate.mjs",
+    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",

@@ -9,6 +9,8 @@ import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { DecisionBar } from "@/features/opportunities/components/detail/decision-bar";
 import { AddNoteForm } from "@/features/opportunities/components/detail/add-note-form";
 import { AddFollowUpForm } from "@/features/opportunities/components/detail/add-follow-up-form";
+import { AnalyzeButton } from "@/features/opportunities/components/detail/analyze-button";
+import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
 import {
   priorityLabel,
   priorityVariant,
@@ -60,6 +62,10 @@ export default async function OpportunityDetailPage({
   const { company, analyses, notes, followUps, pipelineEvents } = detail;
   const analysis = analyses.find((a) => a.status === "completed");
   const output = analysis?.output as ProspectAnalysis | null | undefined;
+  const lastAnalysis = analyses[0];
+  const analysisFailed =
+    company.review_status === "analysis_failed" ||
+    lastAnalysis?.status === "failed";
 
   return (
     <div className="space-y-8">
@@ -105,52 +111,26 @@ export default async function OpportunityDetailPage({
         <div className="space-y-5 lg:col-span-2">
           {/* Análise */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle>Análise comercial</CardTitle>
+              <AnalyzeButton companyId={company.id} hasAnalysis={!!output} />
             </CardHeader>
             <CardContent>
               {output ? (
-                <div className="space-y-5">
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    {output.executive_summary}
-                  </p>
-                  <div className="space-y-2">
-                    {output.score_breakdown.map((d, i) => (
-                      <div
-                        key={i}
-                        className="bg-surface-2/40 rounded-control p-3"
-                      >
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-text-primary">
-                            {d.dimension}
-                          </span>
-                          <span className="tnum text-text-secondary">
-                            {d.points}/{d.max_points}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-text-muted">
-                          {d.explanation}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  {output.opportunities.length > 0 ? (
-                    <div>
-                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-                        Oportunidades
-                      </p>
-                      <ul className="space-y-1 text-sm text-text-secondary">
-                        {output.opportunities.map((o, i) => (
-                          <li key={i}>• {o.text}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
+                <AnalysisPanel output={output} />
               ) : (
                 <EmptyState
-                  title="Sem análise concluída"
-                  description="Esta empresa ainda não possui uma análise de IA concluída."
+                  title={
+                    analysisFailed
+                      ? "Falha na análise"
+                      : "Sem análise concluída"
+                  }
+                  description={
+                    analysisFailed
+                      ? (lastAnalysis?.error_message ??
+                        "A análise falhou. Você pode reprocessar.")
+                      : "Esta empresa ainda não possui uma análise de IA concluída."
+                  }
                   className="border-none py-8"
                 />
               )}

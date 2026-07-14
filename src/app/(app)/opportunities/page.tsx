@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { OpportunitiesControls } from "@/features/opportunities/components/opportunities-controls";
 import { OpportunitiesTable } from "@/features/opportunities/components/opportunities-table";
 import { Pagination } from "@/features/opportunities/components/pagination";
+import { AnalyzePendingButton } from "@/features/opportunities/components/analyze-pending-button";
 import { createServerContext } from "@/server/context";
 import { opportunityFiltersSchema } from "@/lib/validation/company";
 
@@ -37,13 +38,17 @@ export default async function OpportunitiesPage({
     : opportunityFiltersSchema.parse({});
 
   const { repositories } = await createServerContext();
-  const result = await repositories.companies.list(filters);
+  const [result, pendingAnalysis] = await Promise.all([
+    repositories.companies.list(filters),
+    repositories.aiAnalyses.countPendingAnalysis(),
+  ]);
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Oportunidades"
         description="Empresas encontradas, prontas para sua análise."
+        actions={<AnalyzePendingButton pending={pendingAnalysis} />}
       />
       <OpportunitiesControls />
       <OpportunitiesTable rows={result.rows} />
