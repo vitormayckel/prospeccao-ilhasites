@@ -155,3 +155,17 @@ export async function createFollowUpAction(
     return fail(error);
   }
 }
+
+/** Conclui um follow-up (RF-13). Não envia mensagem — apenas registra. */
+export async function completeFollowUpAction(
+  followUpId: string,
+): Promise<ActionResult> {
+  try {
+    const { repositories } = await createServerContext();
+    const followUp = await repositories.followUps.complete(followUpId);
+    revalidateOpportunity(followUp.company_id);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}

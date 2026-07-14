@@ -9,6 +9,7 @@ import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { DecisionBar } from "@/features/opportunities/components/detail/decision-bar";
 import { AddNoteForm } from "@/features/opportunities/components/detail/add-note-form";
 import { AddFollowUpForm } from "@/features/opportunities/components/detail/add-follow-up-form";
+import { CompleteFollowUpButton } from "@/features/opportunities/components/detail/complete-follow-up-button";
 import { AnalyzeButton } from "@/features/opportunities/components/detail/analyze-button";
 import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
 import {
@@ -287,17 +288,24 @@ export default async function OpportunityDetailPage({
                 <ul className="space-y-2 border-t border-border-subtle pt-3">
                   {followUps.map((f) => (
                     <li key={f.id} className="text-sm">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-text-primary">
                           {formatDueLabel(f.due_at)}
                         </span>
-                        <Badge
-                          variant={
-                            f.status === "completed" ? "success" : "warning"
-                          }
-                        >
-                          {f.status === "completed" ? "concluído" : "pendente"}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge
+                            variant={
+                              f.status === "completed" ? "success" : "warning"
+                            }
+                          >
+                            {f.status === "completed"
+                              ? "concluído"
+                              : "pendente"}
+                          </Badge>
+                          {f.status === "pending" ? (
+                            <CompleteFollowUpButton followUpId={f.id} />
+                          ) : null}
+                        </div>
                       </div>
                       {f.notes ? (
                         <p className="text-xs text-text-muted">{f.notes}</p>

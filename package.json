@@ -14,7 +14,8 @@
     "collection:validate": "node scripts/generate-seed.mjs && node scripts/collection-validate.mjs",
     "analysis:validate": "node scripts/generate-seed.mjs && node scripts/analysis-validate.mjs",
     "messaging:validate": "node scripts/generate-seed.mjs && node scripts/messaging-validate.mjs",
-    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs"
+    "pipeline:validate": "node scripts/generate-seed.mjs && node scripts/pipeline-validate.mjs",
+    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs && node scripts/pipeline-validate.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
