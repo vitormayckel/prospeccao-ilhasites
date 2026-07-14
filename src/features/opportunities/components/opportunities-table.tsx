@@ -21,6 +21,7 @@ import {
   statusLabel,
   type OpportunityRow,
   type Priority,
+  type ReviewStatus,
 } from "@/features/opportunities/mock-data";
 
 const priorityVariant: Record<Priority, BadgeProps["variant"]> = {
@@ -28,6 +29,13 @@ const priorityVariant: Record<Priority, BadgeProps["variant"]> = {
   normal: "outline",
   high: "warning",
   urgent: "danger",
+};
+
+const statusDot: Record<ReviewStatus, string> = {
+  pending_review: "bg-info",
+  approved: "bg-success",
+  snoozed: "bg-warning",
+  rejected: "bg-text-muted",
 };
 
 function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
@@ -44,7 +52,7 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
   return (
     <div className="overflow-hidden rounded-card border border-border-subtle">
       <Table>
-        <TableHeader>
+        <TableHeader className="bg-surface-1/40">
           <TableRow className="hover:bg-transparent">
             <TableHead>Empresa</TableHead>
             <TableHead>Cidade</TableHead>
@@ -57,7 +65,7 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow key={row.id} className="group">
               <TableCell className="font-medium text-text-primary">
                 {row.name}
               </TableCell>
@@ -71,14 +79,21 @@ function OpportunitiesTable({ rows }: { rows: OpportunityRow[] }) {
                   {priorityLabel[row.priority]}
                 </Badge>
               </TableCell>
-              <TableCell>{statusLabel[row.status]}</TableCell>
               <TableCell>
+                <span className="inline-flex items-center gap-2 text-text-secondary">
+                  <span
+                    className={`size-1.5 rounded-full ${statusDot[row.status]}`}
+                  />
+                  {statusLabel[row.status]}
+                </span>
+              </TableCell>
+              <TableCell className="text-right">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       aria-label="Ações"
-                      className="focus-visible:ring-accent/40 flex size-8 items-center justify-center rounded-control text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2"
+                      className="focus-visible:ring-accent/40 flex size-8 items-center justify-center rounded-control text-text-muted opacity-0 transition-all hover:bg-surface-2 hover:text-text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 group-hover:opacity-100 data-[state=open]:opacity-100"
                     >
                       <MoreHorizontal className="size-4" />
                     </button>

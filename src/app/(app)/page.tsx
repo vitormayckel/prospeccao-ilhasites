@@ -7,7 +7,7 @@ import { summaryStats } from "@/features/dashboard/mock-data";
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         title="Bom dia"
         description="Estas são as suas prioridades de hoje."
@@ -19,7 +19,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-stretch gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <PriorityList />
         </div>
@@ -27,7 +27,7 @@ export default function DashboardPage() {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-text-secondary">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-text-muted">
           Resumo dos últimos 30 dias
         </h2>
         <MetricsRow />

@@ -3,7 +3,17 @@
  * Nada aqui vem do banco. Serão substituídos por consultas reais nas fases seguintes.
  */
 
+import {
+  Inbox,
+  Send,
+  CalendarClock,
+  AlertTriangle,
+  type LucideIcon,
+} from "lucide-react";
+
 export type PriorityKind = "follow_up" | "approach" | "review";
+
+export type StatIntent = "default" | "accent" | "danger";
 
 export interface PriorityItem {
   id: string;
@@ -17,29 +27,50 @@ export interface StatItem {
   label: string;
   value: string;
   hint: string;
+  icon: LucideIcon;
+  intent: StatIntent;
 }
 
 export interface MetricItem {
   id: string;
   label: string;
   value: string;
+  emphasis?: boolean;
 }
 
 export const summaryStats: StatItem[] = [
-  { id: "review", label: "Aguardando análise", value: "12", hint: "empresas" },
+  {
+    id: "review",
+    label: "Aguardando análise",
+    value: "12",
+    hint: "empresas",
+    icon: Inbox,
+    intent: "default",
+  },
   {
     id: "messages",
     label: "Mensagens pendentes",
     value: "7",
     hint: "aprovadas",
+    icon: Send,
+    intent: "accent",
   },
   {
     id: "followups",
     label: "Follow-ups de hoje",
     value: "3",
     hint: "agendados",
+    icon: CalendarClock,
+    intent: "default",
   },
-  { id: "overdue", label: "Atrasados", value: "1", hint: "follow-up" },
+  {
+    id: "overdue",
+    label: "Atrasados",
+    value: "1",
+    hint: "follow-up",
+    icon: AlertTriangle,
+    intent: "danger",
+  },
 ];
 
 export const priorities: PriorityItem[] = [
@@ -81,5 +112,5 @@ export const monthlyMetrics: MetricItem[] = [
   { id: "approached", label: "Abordadas", value: "94" },
   { id: "replies", label: "Respostas", value: "37" },
   { id: "clients", label: "Clientes", value: "6" },
-  { id: "conversion", label: "Conversão", value: "6,4%" },
+  { id: "conversion", label: "Conversão", value: "6,4%", emphasis: true },
 ];

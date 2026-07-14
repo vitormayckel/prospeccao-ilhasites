@@ -23,7 +23,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onOpenMobileNav={() => setMobileNavOpen(true)} />
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
+            <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
               {children}
             </div>
           </main>

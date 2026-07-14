@@ -22,16 +22,18 @@ function PageHeader({
         className,
       )}
     >
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight text-text-primary">
+      <div className="space-y-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
           {title}
         </h1>
         {description ? (
-          <p className="text-sm text-text-secondary">{description}</p>
+          <p className="text-sm leading-relaxed text-text-secondary">
+            {description}
+          </p>
         ) : null}
       </div>
       {actions ? (
-        <div className="flex items-center gap-2">{actions}</div>
+        <div className="flex shrink-0 items-center gap-2">{actions}</div>
       ) : null}
     </div>
   );

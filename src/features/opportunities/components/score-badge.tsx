@@ -10,7 +10,10 @@ function scoreVariant(score: number): BadgeProps["variant"] {
 
 function ScoreBadge({ score }: { score: number }) {
   return (
-    <Badge variant={scoreVariant(score)} className="font-mono">
+    <Badge
+      variant={scoreVariant(score)}
+      className="tnum min-w-[2.25rem] justify-center font-mono font-semibold tabular-nums"
+    >
       {score}
     </Badge>
   );
