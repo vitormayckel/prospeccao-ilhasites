@@ -5,8 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Ilha Prospect",
-  description:
-    "Sistema Operacional de Prospecção Comercial da Ilha Sites.",
+  description: "Sistema Operacional de Prospecção Comercial da Ilha Sites.",
 };
 
 export default function RootLayout({
