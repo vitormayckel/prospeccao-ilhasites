@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tokens de cor — Blueprint v1 (§13.2). Tema escuro.
+ * O dourado (--accent) comunica seleção, foco e ação principal.
+ * Não usar dourado em grandes superfícies.
+ */
+:root {
+  --background: #0e0f12;
+  --surface-1: #15171c;
+  --surface-2: #1b1e24;
+  --surface-deep: #000000;
+  --border: #292c33;
+  --border-subtle: #20232a;
+  --text-primary: #f5f5f3;
+  --text-secondary: #a4a7ae;
+  --text-muted: #737780;
+  --accent: #c8a24b;
+  --accent-hover: #d2b15f;
+  --accent-soft: rgba(200, 162, 75, 0.12);
+  --success: #4faf83;
+  --warning: #d59a45;
+  --danger: #d86464;
+  --info: #668fd1;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
