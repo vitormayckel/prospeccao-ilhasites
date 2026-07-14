@@ -6,6 +6,7 @@ import {
 } from "@/features/dashboard/components/stat-card";
 import { PriorityList } from "@/features/dashboard/components/priority-list";
 import { SearchActivity } from "@/features/dashboard/components/search-activity";
+import { SearchAlerts } from "@/features/dashboard/components/search-alerts";
 import { MetricsRow } from "@/features/dashboard/components/metrics-row";
 import { createServerContext } from "@/server/context";
 
@@ -20,19 +21,24 @@ function greeting(): string {
 
 export default async function DashboardPage() {
   const { repositories } = await createServerContext();
-  const [summary, priorities, latestSearch, metrics] = await Promise.all([
-    repositories.dashboard.getSummary(),
-    repositories.dashboard.getPriorities(),
-    repositories.dashboard.getLatestSearch(),
-    repositories.dashboard.getMonthlyMetrics(),
-  ]);
+  const [summary, priorities, latestSearch, metrics, searchAlerts] =
+    await Promise.all([
+      repositories.dashboard.getSummary(),
+      repositories.dashboard.getPriorities(),
+      repositories.dashboard.getLatestSearch(),
+      repositories.dashboard.getMonthlyMetrics(),
+      repositories.dashboard.getSearchAlerts(),
+    ]);
 
   const stats: StatItem[] = [
     {
       id: "review",
-      label: "Aguardando análise",
+      label: "Aguardando revisão",
       value: String(summary.pendingReview),
-      hint: "empresas",
+      hint:
+        summary.pendingAnalysis > 0
+          ? `+${summary.pendingAnalysis} em análise IA`
+          : "empresas",
       icon: Inbox,
       intent: "default",
     },
@@ -74,6 +80,8 @@ export default async function DashboardPage() {
           <StatCard key={item.id} item={item} />
         ))}
       </div>
+
+      <SearchAlerts alerts={searchAlerts} />
 
       <div className="grid items-stretch gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">

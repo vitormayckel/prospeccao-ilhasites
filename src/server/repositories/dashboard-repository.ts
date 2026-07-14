@@ -2,11 +2,21 @@ import type { Db } from "@/lib/database/sql";
 
 export interface DashboardSummary {
   pendingReview: number;
+  pendingAnalysis: number;
   approvedAwaitingMessage: number;
   followUpsDueToday: number;
   followUpsOverdue: number;
   foundLast30Days: number;
   clients: number;
+}
+
+export interface SearchAlert {
+  run_id: string;
+  profile_id: string | null;
+  profile_name: string | null;
+  status: string;
+  error_message: string | null;
+  finished_at: string | null;
 }
 
 export interface MonthlyMetrics {
@@ -40,6 +50,8 @@ export function createDashboardRepository(db: Db) {
         `select
           (select count(*)::int from companies
              where review_status = 'pending_review' and deleted_at is null) as "pendingReview",
+          (select count(*)::int from companies
+             where review_status = 'pending_analysis' and deleted_at is null) as "pendingAnalysis",
           (select count(*)::int from companies
              where pipeline_stage = 'approved' and deleted_at is null) as "approvedAwaitingMessage",
           (select count(*)::int from follow_ups
@@ -104,6 +116,20 @@ export function createDashboardRepository(db: Db) {
             where c.review_status = 'pending_review' and c.deleted_at is null)
          order by sort_at asc
          limit 8`,
+      );
+    },
+
+    /** Buscas com falha/parciais recentes — alerta acionável (§10.5/RF-15). */
+    async getSearchAlerts(): Promise<SearchAlert[]> {
+      return db.query<SearchAlert>(
+        `select r.id as run_id, r.search_profile_id as profile_id,
+                sp.name as profile_name, r.status, r.error_message, r.finished_at
+           from search_runs r
+           left join search_profiles sp on sp.id = r.search_profile_id
+           where r.status in ('failed', 'partial')
+             and coalesce(r.finished_at, r.created_at) >= now() - interval '7 days'
+           order by coalesce(r.finished_at, r.created_at) desc
+           limit 5`,
       );
     },
 
