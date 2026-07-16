@@ -44,6 +44,7 @@ export const settingsNav = [
   { label: "Pesquisas", href: "/settings/searches" },
   { label: "Integrações", href: "/settings/integrations" },
   { label: "Score", href: "/settings/scoring" },
+  { label: "Saúde do Sistema", href: "/settings/health" },
   { label: "Geral", href: "/settings/general" },
 ];
 

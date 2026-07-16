@@ -13,12 +13,14 @@ import { createIntegrationsRepository } from "@/server/repositories/integrations
 import { createProfilesRepository } from "@/server/repositories/profiles-repository";
 import { createCollectionRepository } from "@/server/repositories/collection-repository";
 import { createAiAnalysesRepository } from "@/server/repositories/ai-analyses-repository";
+import { createHealthRepository } from "@/server/repositories/health-repository";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 import { createCollectionService } from "@/server/services/collection-service";
 import { createAnalysisService } from "@/server/services/analysis-service";
 import { createMessagingService } from "@/server/services/messaging-service";
 import { createContactService } from "@/server/services/contact-service";
+import { createHealthService } from "@/server/services/health-service";
 
 /**
  * Composition root do servidor: resolve o banco e instancia
@@ -43,6 +45,7 @@ export async function createServerContext(options?: {
   const profiles = createProfilesRepository(db);
   const collection = createCollectionRepository(db);
   const aiAnalyses = createAiAnalysesRepository(db);
+  const healthRepo = createHealthRepository(db);
 
   const review = createReviewService({
     companies,
@@ -68,6 +71,7 @@ export async function createServerContext(options?: {
     followUps,
     pipeline: pipelineService,
   });
+  const healthService = createHealthService({ health: healthRepo });
 
   return {
     db,
@@ -85,6 +89,7 @@ export async function createServerContext(options?: {
       profiles,
       collection,
       aiAnalyses,
+      health: healthRepo,
     },
     services: {
       review,
@@ -93,6 +98,7 @@ export async function createServerContext(options?: {
       analysis: analysisService,
       messaging: messagingService,
       contact: contactService,
+      health: healthService,
     },
   };
 }
