@@ -27,6 +27,25 @@ export function createTemplatesRepository(db: Db) {
       return rows[0] ?? null;
     },
 
+    /** Detecta duplicata na mesma categoria: nome igual (case-insensitive) ou
+     *  conteúdo idêntico. Evita biblioteca poluída (§1). */
+    async findDuplicate(input: {
+      category: MessageKind;
+      name: string;
+      content: string;
+      excludeId?: string;
+    }): Promise<MessageTemplateRow | null> {
+      const rows = await db.query<MessageTemplateRow>(
+        `select * from message_templates
+         where deleted_at is null and category = $1
+           and ($4::uuid is null or id <> $4)
+           and (lower(btrim(name)) = lower(btrim($2)) or btrim(content) = btrim($3))
+         limit 1`,
+        [input.category, input.name, input.content, input.excludeId ?? null],
+      );
+      return rows[0] ?? null;
+    },
+
     async create(input: {
       name: string;
       category: MessageKind;

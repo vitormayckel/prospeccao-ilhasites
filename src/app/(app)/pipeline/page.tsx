@@ -9,7 +9,8 @@ import {
 } from "@/features/opportunities/labels";
 import { createServerContext } from "@/server/context";
 import { cn } from "@/lib/utils";
-import type { CompanyRow, PipelineStage } from "@/types/domain";
+import type { PipelineStage } from "@/types/domain";
+import type { PipelineBoardRow } from "@/server/repositories/pipeline-repository";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function PipelinePage() {
   const { repositories } = await createServerContext();
   const companies = await repositories.pipeline.board();
 
-  const byStage = new Map<PipelineStage, CompanyRow[]>();
+  const byStage = new Map<PipelineStage, PipelineBoardRow[]>();
   for (const stage of COLUMNS) byStage.set(stage, []);
   for (const c of companies) {
     byStage.get(c.pipeline_stage)?.push(c);

@@ -156,14 +156,16 @@ export async function createFollowUpAction(
   }
 }
 
-/** Conclui um follow-up (RF-13). Não envia mensagem — apenas registra. */
+/** Conclui um follow-up (RF-13). Não envia mensagem — apenas registra. Se for
+ *  lembrete de "sem resposta", avança a cadência (§5) via serviço de contato. */
 export async function completeFollowUpAction(
   followUpId: string,
 ): Promise<ActionResult> {
   try {
-    const { repositories } = await createServerContext();
-    const followUp = await repositories.followUps.complete(followUpId);
+    const { services } = await createServerContext();
+    const followUp = await services.contact.completeFollowUp(followUpId);
     revalidateOpportunity(followUp.company_id);
+    revalidatePath("/messages");
     return { ok: true };
   } catch (error) {
     return fail(error);

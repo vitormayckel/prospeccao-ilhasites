@@ -1,4 +1,43 @@
 import type { Db } from "@/lib/database/sql";
+import type { ContactStage } from "@/types/domain";
+
+/** Contas compactas do topo do dashboard (§4). */
+export interface QueueSummary {
+  toApproach: number;
+  awaitingReply: number;
+  replied: number;
+  followUpsToday: number;
+  overdue: number;
+  reviewPending: number;
+}
+
+export type QueueActionKind =
+  | "follow_up_overdue"
+  | "follow_up_today"
+  | "reply_awaiting_commercial"
+  | "message_awaiting_send"
+  | "greeting_pending"
+  | "review_pending"
+  | "search_alert";
+
+export interface TodayQueueItem {
+  kind: QueueActionKind;
+  rank: number;
+  company_id: string | null;
+  company_name: string;
+  contact_stage: ContactStage | null;
+  phone_e164: string | null;
+  phone_raw: string | null;
+  score: number | null;
+  due_at: string | null;
+  reason: string | null;
+  follow_up_id: string | null;
+  message_id: string | null;
+}
+
+/** Início do dia atual no fuso America/Sao_Paulo, como timestamptz. */
+const SP_DAY_START =
+  "(date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo')";
 
 export interface DashboardSummary {
   pendingReview: number;
@@ -117,6 +156,114 @@ export function createDashboardRepository(db: Db) {
          order by sort_at asc
          limit 8`,
       );
+    },
+
+    /** Contadores compactos do topo do dashboard (§4), fuso America/Sao_Paulo. */
+    async getQueueSummary(): Promise<QueueSummary> {
+      const rows = await db.query<Record<keyof QueueSummary, number>>(
+        `with tz as (select ${SP_DAY_START} as day_start)
+         select
+           (select count(*)::int from companies
+              where deleted_at is null and review_status = 'approved'
+                and contact_stage = 'not_started') as "toApproach",
+           (select count(*)::int from companies
+              where deleted_at is null and contact_stage = 'awaiting_reply') as "awaitingReply",
+           (select count(*)::int from companies
+              where deleted_at is null and contact_stage = 'replied') as "replied",
+           (select count(*)::int from follow_ups f, tz
+              where f.status = 'pending' and f.deleted_at is null
+                and f.due_at >= tz.day_start
+                and f.due_at < tz.day_start + interval '1 day') as "followUpsToday",
+           (select count(*)::int from follow_ups f, tz
+              where f.status = 'pending' and f.deleted_at is null
+                and f.due_at < tz.day_start) as "overdue",
+           (select count(*)::int from companies
+              where deleted_at is null and review_status = 'pending_review') as "reviewPending"`,
+      );
+      return rows[0]!;
+    },
+
+    /**
+     * Fila de Hoje (§4): checklist operacional priorizado, com dados reais,
+     * fuso America/Sao_Paulo, uma entrada por empresa (deduplicada pela ação
+     * de maior prioridade). Alertas de coleta não têm empresa e nunca somem.
+     */
+    async getTodayQueue(): Promise<TodayQueueItem[]> {
+      const rows = await db.query<TodayQueueItem & { sort_at: string | null }>(
+        `with tz as (select ${SP_DAY_START} as day_start)
+         select
+           case when f.due_at < tz.day_start then 'follow_up_overdue'
+                else 'follow_up_today' end as kind,
+           case when f.due_at < tz.day_start then 1 else 2 end as rank,
+           c.id as company_id, c.name as company_name, c.contact_stage,
+           c.phone_e164, c.phone_raw, c.score,
+           f.due_at, f.notes as reason, f.id as follow_up_id,
+           null::uuid as message_id, f.due_at as sort_at
+         from follow_ups f
+         join companies c on c.id = f.company_id
+         cross join tz
+         where f.status = 'pending' and f.deleted_at is null and c.deleted_at is null
+           and f.due_at < tz.day_start + interval '1 day'
+
+         union all
+         select 'reply_awaiting_commercial', 3, c.id, c.name, c.contact_stage,
+           c.phone_e164, c.phone_raw, c.score,
+           null::timestamptz, null, null::uuid, null::uuid, c.updated_at
+         from companies c
+         where c.deleted_at is null and c.contact_stage = 'replied'
+
+         union all
+         select 'message_awaiting_send', 4, c.id, c.name, c.contact_stage,
+           c.phone_e164, c.phone_raw, c.score,
+           null::timestamptz, null, null::uuid, m.id, c.updated_at
+         from companies c
+         left join lateral (
+           select id from messages mm
+           where mm.company_id = c.id and mm.status = 'opened'
+           order by coalesce(mm.opened_at, mm.created_at) desc limit 1
+         ) m on true
+         where c.deleted_at is null
+           and c.contact_stage in ('greeting_prepared', 'commercial_prepared')
+
+         union all
+         select 'greeting_pending', 5, c.id, c.name, c.contact_stage,
+           c.phone_e164, c.phone_raw, c.score,
+           null::timestamptz, null, null::uuid, null::uuid, c.updated_at
+         from companies c
+         where c.deleted_at is null and c.review_status = 'approved'
+           and c.contact_stage = 'not_started'
+
+         union all
+         select 'review_pending', 6, c.id, c.name, null::contact_stage,
+           c.phone_e164, c.phone_raw, c.score,
+           null::timestamptz, null, null::uuid, null::uuid, c.created_at
+         from companies c
+         where c.deleted_at is null and c.review_status = 'pending_review'
+
+         union all
+         select 'search_alert', 7, null::uuid, coalesce(sp.name, 'Busca'),
+           null::contact_stage, null, null, null::int,
+           null::timestamptz, r.error_message, null::uuid, null::uuid,
+           coalesce(r.finished_at, r.created_at)
+         from search_runs r
+         left join search_profiles sp on sp.id = r.search_profile_id
+         where r.status in ('failed', 'partial')
+           and coalesce(r.finished_at, r.created_at) >= now() - interval '7 days'
+
+         order by rank asc, sort_at asc nulls last`,
+      );
+
+      // Dedup por empresa: mantém a ação de maior prioridade (menor rank).
+      const seen = new Set<string>();
+      const out: TodayQueueItem[] = [];
+      for (const r of rows) {
+        if (r.company_id) {
+          if (seen.has(r.company_id)) continue;
+          seen.add(r.company_id);
+        }
+        out.push(r);
+      }
+      return out;
     },
 
     /** Buscas com falha/parciais recentes — alerta acionável (§10.5/RF-15). */

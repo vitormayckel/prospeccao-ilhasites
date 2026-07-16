@@ -11,6 +11,7 @@ import type {
   PipelineStage,
   Priority,
   ReviewStatus,
+  ContactStage,
 } from "@/types/domain";
 import type { OpportunityFilters } from "@/lib/validation/company";
 
@@ -187,6 +188,17 @@ export function createCompaniesRepository(db: Db) {
       const rows = await db.query<CompanyRow>(
         `update companies set ${sets.join(", ")} where id = $${params.length} returning *`,
         params,
+      );
+      return rows[0]!;
+    },
+
+    async setContactStage(
+      id: string,
+      stage: ContactStage,
+    ): Promise<CompanyRow> {
+      const rows = await db.query<CompanyRow>(
+        "update companies set contact_stage = $1, updated_at = now() where id = $2 returning *",
+        [stage, id],
       );
       return rows[0]!;
     },

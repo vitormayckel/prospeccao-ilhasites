@@ -13,10 +13,7 @@ import { AddFollowUpForm } from "@/features/opportunities/components/detail/add-
 import { CompleteFollowUpButton } from "@/features/opportunities/components/detail/complete-follow-up-button";
 import { AnalyzeButton } from "@/features/opportunities/components/detail/analyze-button";
 import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
-import {
-  MessageComposer,
-  type ComposerTemplate,
-} from "@/features/messages/components/message-composer";
+import { ContactFlow } from "@/features/opportunities/components/detail/contact-flow";
 import {
   priorityLabel,
   priorityVariant,
@@ -27,10 +24,8 @@ import {
 import { formatDateTime, formatDueLabel, formatDueCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { createServerContext } from "@/server/context";
-import {
-  resolveTemplate,
-  buildTemplateValues,
-} from "@/server/services/whatsapp";
+import { suggestGreeting } from "@/lib/greeting";
+import { buildCommercialSuggestion, canStartContact } from "@/lib/contact-flow";
 import type { ProspectAnalysis } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -83,18 +78,17 @@ export default async function OpportunityDetailPage({
     company.review_status === "analysis_failed" ||
     lastAnalysis?.status === "failed";
 
-  // Templates resolvidos para o compositor de mensagem (RF-11).
-  const templateRows = await repositories.templates.list();
-  const values = buildTemplateValues(company);
-  const composerTemplates: ComposerTemplate[] = templateRows
-    .filter((t) => t.active)
-    .map((t) => ({
-      id: t.id,
-      name: t.name,
-      category: t.category,
-      resolvedContent: resolveTemplate(t.content, values).content,
-    }));
   const lastMessage = messages[0];
+  const suggestedGreeting = suggestGreeting();
+  const suggestedCommercial = buildCommercialSuggestion(company, output ?? null);
+  const greetingMessageId =
+    messages.find((m) => m.type === "greeting" && m.status === "opened")?.id ??
+    null;
+  const commercialMessageId =
+    messages.find((m) => m.type === "first_contact" && m.status === "opened")
+      ?.id ?? null;
+  const contactPhone = company.phone_e164 ?? company.phone_raw ?? null;
+  const showContactFlow = canStartContact(company);
   const messageStatusLabel: Record<string, string> = {
     draft: "rascunho",
     opened: "aberta (não confirmada)",
@@ -276,23 +270,26 @@ export default async function OpportunityDetailPage({
             </CardContent>
           </Card>
 
-          {/* Abordagem (WhatsApp manual) */}
+          {/* Abordagem (WhatsApp manual, saudação primeiro — §1) */}
           <Card>
             <CardHeader>
               <CardTitle>Abordagem</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {company.phone_e164 || company.phone_raw ? (
-                <MessageComposer
+              {showContactFlow ? (
+                <ContactFlow
                   companyId={company.id}
-                  companyName={company.name}
-                  phoneE164={company.phone_e164}
-                  phoneDisplay={company.phone_raw ?? company.phone_e164}
-                  templates={composerTemplates}
+                  phone={contactPhone}
+                  contactStage={company.contact_stage}
+                  suggestedGreeting={suggestedGreeting}
+                  suggestedCommercial={suggestedCommercial}
+                  greetingMessageId={greetingMessageId}
+                  commercialMessageId={commercialMessageId}
                 />
               ) : (
                 <p className="text-sm text-text-muted">
-                  Sem telefone para abordagem por WhatsApp.
+                  Aprove a empresa para iniciar o contato — a primeira mensagem é
+                  só uma saudação curta.
                 </p>
               )}
               {lastMessage ? (

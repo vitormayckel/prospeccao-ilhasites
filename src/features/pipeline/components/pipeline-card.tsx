@@ -12,13 +12,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { pipelineStageLabel } from "@/features/opportunities/labels";
+import { CONTACT_STAGE_LABEL, nextContactAction } from "@/lib/contact-flow";
 import { formatAgo, formatDateTime, formatDueCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  PIPELINE_STAGE,
-  type CompanyRow,
-  type PipelineStage,
-} from "@/types/domain";
+import { PIPELINE_STAGE, type PipelineStage } from "@/types/domain";
+import type { PipelineBoardRow } from "@/server/repositories/pipeline-repository";
 import { moveStageAction } from "@/server/actions/pipeline";
 
 const MOVABLE: PipelineStage[] = PIPELINE_STAGE.filter(
@@ -26,7 +24,10 @@ const MOVABLE: PipelineStage[] = PIPELINE_STAGE.filter(
 );
 const TERMINAL: PipelineStage[] = ["client", "lost"];
 
-export function PipelineCard({ company }: { company: CompanyRow }) {
+/** Estágios terminais do contato — não há próxima ação a sugerir no card. */
+const CONTACT_DONE = new Set(["closed"]);
+
+export function PipelineCard({ company }: { company: PipelineBoardRow }) {
   const [isPending, startTransition] = useTransition();
 
   function move(to: PipelineStage) {
@@ -43,19 +44,22 @@ export function PipelineCard({ company }: { company: CompanyRow }) {
     });
   }
 
-  const due = company.next_action_at
-    ? formatDueCompact(company.next_action_at)
+  // Prazo do próximo follow-up pendente (não o next_action_at, que não é
+  // mantido pelos lembretes). Atraso é a única condição que colore o card.
+  const due = company.next_follow_up_at
+    ? formatDueCompact(company.next_follow_up_at)
     : null;
-  // Sem próxima ação agendada, o tempo parado no estágio é a informação útil.
   const subtitle =
     [company.city, company.primary_category].filter(Boolean).join(" · ") || "—";
 
+  // Próxima ação do contato — só para estágios comerciais (não em cliente/perdido).
+  const isCommercialStage =
+    company.pipeline_stage !== "client" && company.pipeline_stage !== "lost";
+  const action = nextContactAction(company.contact_stage);
+  const showNextAction =
+    isCommercialStage && !CONTACT_DONE.has(company.contact_stage);
+
   return (
-    /*
-     * O card flutua sobre o vão da coluna: superfície mais clara, contorno e
-     * sombra. No hover ele sobe 1px — o movimento mínimo que comunica "isto é
-     * pegável" sem virar animação.
-     */
     <div
       className={cn(
         "group/card relative overflow-hidden rounded-control border border-border-subtle bg-surface-2 p-3",
@@ -65,7 +69,6 @@ export function PipelineCard({ company }: { company: CompanyRow }) {
         isPending && "pointer-events-none opacity-40",
       )}
     >
-      {/* Atraso é a única condição que colore o card, e só numa régua fina. */}
       {due?.overdue ? (
         <span
           aria-hidden
@@ -79,7 +82,6 @@ export function PipelineCard({ company }: { company: CompanyRow }) {
             href={`/opportunities/${company.id}`}
             className="block truncate text-meta font-semibold text-text-primary outline-none transition-colors hover:text-accent focus-visible:text-accent"
           >
-            {/* Alvo de clique cobre o card inteiro sem aninhar interativos. */}
             <span className="absolute inset-0 rounded-control" aria-hidden />
             {company.name}
           </Link>
@@ -90,11 +92,30 @@ export function PipelineCard({ company }: { company: CompanyRow }) {
         ) : null}
       </div>
 
-      {/* Fio interno: separa identidade (acima) de estado e ação (abaixo). */}
+      {/* Estado do contato + próxima ação: é o que diferencia dois cards na
+       * mesma coluna e diz ao operador o que fazer sem abrir a empresa. */}
+      {isCommercialStage ? (
+        <div className="mt-2.5 space-y-0.5">
+          <p className="truncate text-micro font-medium text-text-secondary">
+            {CONTACT_STAGE_LABEL[company.contact_stage]}
+          </p>
+          {showNextAction ? (
+            <p className="truncate text-micro text-accent">→ {action.label}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Motivo do follow-up, quando houver. */}
+      {company.next_follow_up_reason ? (
+        <p className="mt-1.5 line-clamp-1 text-micro text-text-muted">
+          {company.next_follow_up_reason}
+        </p>
+      ) : null}
+
       <div className="border-border-subtle/80 mt-3 flex h-6 items-center justify-between gap-2 border-t pt-2.5">
         {due ? (
           <span
-            title={formatDateTime(company.next_action_at)}
+            title={formatDateTime(company.next_follow_up_at)}
             className={cn(
               "truncate text-micro",
               due.overdue
@@ -107,12 +128,14 @@ export function PipelineCard({ company }: { company: CompanyRow }) {
             {due.label}
           </span>
         ) : (
-          <span className="truncate text-micro text-text-muted">
+          <span
+            title={`No estágio desde ${formatDateTime(company.updated_at)}`}
+            className="truncate text-micro text-text-muted"
+          >
             {formatAgo(company.updated_at)}
           </span>
         )}
 
-        {/* A ação só existe quando o operador vai usá-la. */}
         <div className="relative shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/card:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

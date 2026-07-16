@@ -76,12 +76,26 @@ export const DECISION_TYPE = [
 export type DecisionType = (typeof DECISION_TYPE)[number];
 
 export const MESSAGE_KIND = [
+  "greeting",
   "first_contact",
   "follow_up",
+  "after_conversation",
   "reactivation",
   "last_attempt",
 ] as const;
 export type MessageKind = (typeof MESSAGE_KIND)[number];
+
+export const CONTACT_STAGE = [
+  "not_started",
+  "greeting_prepared",
+  "awaiting_reply",
+  "replied",
+  "commercial_prepared",
+  "commercial_sent",
+  "follow_up_scheduled",
+  "closed",
+] as const;
+export type ContactStage = (typeof CONTACT_STAGE)[number];
 
 export const MESSAGE_STATUS = [
   "draft",
@@ -227,6 +241,7 @@ export type CompanyRow = Timestamps & {
   reviews_count: number | null;
   pipeline_stage: PipelineStage;
   review_status: ReviewStatus;
+  contact_stage: ContactStage;
   priority: Priority;
   score: number | null;
   next_action_at: string | null;
