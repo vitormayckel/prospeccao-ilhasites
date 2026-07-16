@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Table,
   TableHeader,
@@ -53,25 +54,24 @@ export default async function SearchProfileDetailPage({
     <div className="space-y-5">
       <Link
         href="/settings/searches"
-        className="inline-flex items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
+        className="inline-flex items-center gap-1.5 text-meta text-text-muted transition-colors hover:text-text-primary"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className="size-3.5" />
         Perfis de pesquisa
       </Link>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-medium text-text-primary">
-              {profile.name}
-            </h2>
-            <Badge
-              variant={profile.status === "active" ? "success" : "neutral"}
-            >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2.5">
+            <StatusDot
+              tone={profile.status === "active" ? "success" : "neutral"}
+            />
+            <h2 className="text-title text-text-primary">{profile.name}</h2>
+            <span className="text-micro text-text-muted">
               {profile.status === "active" ? "Ativo" : "Pausado"}
-            </Badge>
+            </span>
           </div>
-          <p className="text-sm text-text-secondary">
+          <p className="text-meta text-text-secondary">
             Provedor: {profile.provider} · limite {profile.daily_limit}/dia ·{" "}
             {profile.run_time} ({profile.timezone})
           </p>

@@ -33,16 +33,12 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <Brand collapsed={collapsed} />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-5">
+        {!collapsed ? <p className="eyebrow mb-2.5 px-2.5">Operação</p> : null}
         <NavLinks collapsed={collapsed} />
       </div>
 
-      <div
-        className={cn(
-          "border-t border-border-subtle p-3",
-          collapsed && "flex justify-center",
-        )}
-      >
+      <div className={cn("p-3", collapsed && "flex justify-center")}>
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <button
@@ -50,15 +46,16 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               onClick={onToggle}
               aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
               className={cn(
-                "flex h-9 items-center gap-3 rounded-control px-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-1 hover:text-text-primary",
-                collapsed ? "w-9 justify-center px-0" : "w-full",
+                "flex h-8 items-center gap-2.5 rounded-control px-2.5 text-meta font-medium text-text-muted transition-colors hover:bg-surface-1 hover:text-text-primary",
+                "focus-visible:ring-accent/40 focus-visible:outline-none focus-visible:ring-2",
+                collapsed ? "w-8 justify-center px-0" : "w-full",
               )}
             >
               {collapsed ? (
-                <PanelLeftOpen className="size-[18px]" />
+                <PanelLeftOpen className="size-4" strokeWidth={1.75} />
               ) : (
                 <>
-                  <PanelLeftClose className="size-[18px]" />
+                  <PanelLeftClose className="size-4" strokeWidth={1.75} />
                   <span>Recolher</span>
                 </>
               )}

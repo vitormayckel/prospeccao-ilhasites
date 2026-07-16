@@ -39,9 +39,9 @@ export function AddFollowUpForm({ companyId }: { companyId: string }) {
         aria-label="Data do follow-up"
       />
       <Input name="notes" placeholder="Observação (opcional)" />
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         {state && !state.ok ? (
-          <span className="text-xs text-danger">{state.error}</span>
+          <span className="text-micro text-danger">{state.error}</span>
         ) : (
           <span />
         )}

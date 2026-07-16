@@ -1,18 +1,12 @@
 import { UserCog } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Field, Fieldset } from "@/components/ui/field";
+import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/ui/empty-state";
 import { createServerContext } from "@/server/context";
 
 export const dynamic = "force-dynamic";
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-3 text-sm">
-      <span className="text-text-secondary">{label}</span>
-      <span className="text-text-primary">{value}</span>
-    </div>
-  );
-}
 
 export default async function SettingsGeneralPage() {
   const { repositories } = await createServerContext();
@@ -29,13 +23,76 @@ export default async function SettingsGeneralPage() {
   }
 
   return (
-    <Card>
-      <CardContent className="divide-y divide-border-subtle p-5 py-0">
-        <Row label="Nome" value={operator.display_name} />
-        <Row label="E-mail" value={operator.email ?? "—"} />
-        <Row label="Papel" value={operator.role} />
-        <Row label="Fuso horário" value="America/Sao_Paulo" />
-      </CardContent>
-    </Card>
+    /*
+     * Formulário em duas colunas: à esquerda o que a seção significa, à direita
+     * os campos. Explica antes de o operador ter de adivinhar — e dispensa a
+     * moldura de card que antes empilhava configuração dentro de caixa.
+     */
+    <div className="space-y-10">
+      <Fieldset
+        title="Operação"
+        description="Metas e janelas que orientam o ritmo diário da prospecção."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field
+            label="Meta mensal"
+            htmlFor="goal"
+            hint="Oportunidades qualificadas por mês."
+          >
+            <Input id="goal" value="40 oportunidades qualificadas" readOnly />
+          </Field>
+          <Field
+            label="Horário de abordagem"
+            htmlFor="window"
+            hint="Fora dessa janela, as abordagens ficam preparadas."
+          >
+            <Input id="window" value="08:00–18:00 · segunda a sexta" readOnly />
+          </Field>
+          <Field
+            label="Parâmetros da operação"
+            htmlFor="params"
+            hint="Limites aplicados a cada lead."
+            className="sm:col-span-2"
+          >
+            <Input
+              id="params"
+              value="3 tentativas por lead · revisão manual obrigatória"
+              readOnly
+            />
+          </Field>
+        </div>
+      </Fieldset>
+
+      <Separator />
+
+      <Fieldset
+        title="Responsável"
+        description="Quem opera a fila e responde pelas decisões."
+      >
+        <Field label="Operador" htmlFor="operator">
+          <Input
+            id="operator"
+            value={`${operator.display_name} · ${operator.role}`}
+            readOnly
+          />
+        </Field>
+      </Fieldset>
+
+      <Separator />
+
+      <Fieldset
+        title="Fluxo de trabalho"
+        description="A regra que a máquina segue antes de entregar a fila ao operador."
+      >
+        <Field label="Descrição" htmlFor="workflow">
+          <Textarea
+            id="workflow"
+            readOnly
+            rows={4}
+            value="A operação prioriza empresas aprovadas, com follow-up até 24h e revisão humana antes do fechamento."
+          />
+        </Field>
+      </Fieldset>
+    </div>
   );
 }

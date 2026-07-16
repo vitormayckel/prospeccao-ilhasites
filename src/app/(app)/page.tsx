@@ -1,9 +1,10 @@
 import { Inbox, Send, CalendarClock, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import {
-  StatCard,
+  StatRow,
   type StatItem,
 } from "@/features/dashboard/components/stat-card";
+import { SectionLabel } from "@/components/ui/section-label";
 import { PriorityList } from "@/features/dashboard/components/priority-list";
 import { SearchActivity } from "@/features/dashboard/components/search-activity";
 import { SearchAlerts } from "@/features/dashboard/components/search-alerts";
@@ -69,32 +70,35 @@ export default async function DashboardPage() {
   ];
 
   return (
+    /*
+     * Hierarquia em três níveis, do mais alto ao mais baixo:
+     * 1. KPIs do dia — superfície elevada, numeral de 44px, fio dourado.
+     * 2. Últimos 30 dias — anexo dos KPIs: sem moldura e a 26px. Fica colado
+     *    à faixa acima porque contextualiza aqueles números.
+     * 3. Alertas, prioridades e atividade — blocos planos de trabalho.
+     */
     <div className="space-y-10">
       <PageHeader
+        eyebrow="Visão geral"
         title={greeting()}
         description="Estas são as suas prioridades de hoje."
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((item) => (
-          <StatCard key={item.id} item={item} />
-        ))}
-      </div>
+      <section className="space-y-6">
+        <StatRow items={stats} />
+        <div className="px-1">
+          <MetricsRow metrics={metrics} />
+        </div>
+      </section>
 
       <SearchAlerts alerts={searchAlerts} />
 
-      <div className="grid items-stretch gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <section className="space-y-5">
+        <SectionLabel>Fila de trabalho</SectionLabel>
+        <div className="grid items-stretch gap-5 lg:grid-cols-[1.5fr_1fr]">
           <PriorityList items={priorities} />
+          <SearchActivity data={latestSearch} />
         </div>
-        <SearchActivity data={latestSearch} />
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-text-muted">
-          Resumo dos últimos 30 dias
-        </h2>
-        <MetricsRow metrics={metrics} />
       </section>
     </div>
   );

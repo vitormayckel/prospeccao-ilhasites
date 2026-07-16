@@ -6,11 +6,12 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Ajustes"
         title="Configurações"
         description="Perfis de pesquisa, integrações, score e preferências."
       />
       <SettingsNav />
-      <div className="pt-2">{children}</div>
+      <div className="pt-4">{children}</div>
     </div>
   );
 }

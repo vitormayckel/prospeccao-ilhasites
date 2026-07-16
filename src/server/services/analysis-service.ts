@@ -31,30 +31,34 @@ export interface AnalyzeBatchResult {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Verifica invariantes semânticas do contrato (Blueprint §9.6, passos 5-6). */
-function validateSemantics(
-  analysis: ProspectAnalysis,
-  refs: Set<string>,
-): string | null {
-  const sum = analysis.score_breakdown.reduce((s, d) => s + d.points, 0);
-  if (Math.round(sum) !== analysis.score) {
-    return `soma do breakdown (${sum}) difere do score (${analysis.score})`;
-  }
-  for (const d of analysis.score_breakdown) {
-    if (d.points > d.max_points) {
-      return `dimensão "${d.dimension}" excede o máximo (${d.points}/${d.max_points})`;
-    }
-  }
-  const allRefs = [
+/**
+ * Saneia e reconcilia a análise ANTES da validação semântica (mutação in-place;
+ * os valores saneados são os que serão persistidos):
+ * - remove evidence_refs que não existam no snapshot, sem rejeitar a análise;
+ * - deriva o score da soma dos points do breakdown (score recalculável, §9.6/5),
+ *   eliminando divergências aritméticas do modelo. Limitado a 0–100.
+ */
+function sanitizeAnalysis(analysis: ProspectAnalysis, refs: Set<string>): void {
+  const items = [
     ...analysis.score_breakdown,
     ...analysis.positives,
     ...analysis.risks,
     ...analysis.opportunities,
     ...analysis.sales_arguments,
-  ].flatMap((item) => item.evidence_refs);
-  const invalid = allRefs.filter((ref) => !refs.has(ref));
-  if (invalid.length > 0) {
-    return `evidence_refs inexistentes no snapshot: ${[...new Set(invalid)].join(", ")}`;
+  ];
+  for (const item of items) {
+    item.evidence_refs = item.evidence_refs.filter((ref) => refs.has(ref));
+  }
+  const sum = analysis.score_breakdown.reduce((s, d) => s + d.points, 0);
+  analysis.score = Math.max(0, Math.min(100, Math.round(sum)));
+}
+
+/** Verifica invariantes semânticas do contrato (Blueprint §9.6, passos 5-6). */
+function validateSemantics(analysis: ProspectAnalysis): string | null {
+  for (const d of analysis.score_breakdown) {
+    if (d.points > d.max_points) {
+      return `dimensão "${d.dimension}" excede o máximo (${d.points}/${d.max_points})`;
+    }
   }
   return null;
 }
@@ -108,7 +112,8 @@ export function createAnalysisService(deps: {
           lastError = `schema inválido: ${parsed.error.issues[0]?.message ?? "erro"}`;
           throw new Error(lastError);
         }
-        const semanticError = validateSemantics(parsed.data, refs);
+        sanitizeAnalysis(parsed.data, refs);
+        const semanticError = validateSemantics(parsed.data);
         if (semanticError) {
           lastError = semanticError;
           throw new Error(lastError);

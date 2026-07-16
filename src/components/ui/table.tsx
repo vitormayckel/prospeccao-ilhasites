@@ -8,7 +8,7 @@ const Table = React.forwardRef<
   <div className="w-full overflow-x-auto">
     <table
       ref={ref}
-      className={cn("w-full caption-bottom text-[13px]", className)}
+      className={cn("w-full caption-bottom text-meta", className)}
       {...props}
     />
   </div>
@@ -21,7 +21,7 @@ const TableHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn("border-b border-border-subtle", className)}
+    className={cn("bg-surface-2/40 border-b border-border", className)}
     {...props}
   />
 ));
@@ -39,6 +39,10 @@ const TableBody = React.forwardRef<
 ));
 TableBody.displayName = "TableBody";
 
+/*
+ * A linha usa uma régua dourada à esquerda no hover em vez de mudar de cor
+ * inteira: sinaliza o alvo sem piscar a tabela toda.
+ */
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
@@ -46,7 +50,9 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "hover:bg-surface-2/40 border-b border-border-subtle transition-colors data-[state=selected]:bg-surface-1",
+      "border-b border-border-subtle transition-colors",
+      "hover:bg-surface-2/50 data-[state=selected]:bg-surface-2/70",
+      "hover:[&>td:first-child]:before:bg-accent/50 [&>td:first-child]:relative [&>td:first-child]:before:absolute [&>td:first-child]:before:inset-y-0 [&>td:first-child]:before:left-0 [&>td:first-child]:before:w-[2px] [&>td:first-child]:before:bg-transparent [&>td:first-child]:before:transition-colors",
       className,
     )}
     {...props}
@@ -61,7 +67,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-9 whitespace-nowrap px-4 text-left align-middle text-[11px] font-medium uppercase tracking-wider text-text-muted",
+      "h-10 whitespace-nowrap px-4 text-left align-middle text-label text-text-muted",
       className,
     )}
     {...props}
@@ -75,7 +81,10 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn("px-4 py-3.5 align-middle text-text-secondary", className)}
+    className={cn(
+      "px-4 py-[1.125rem] align-middle text-text-secondary",
+      className,
+    )}
     {...props}
   />
 ));

@@ -1,0 +1,111 @@
+warning: in the working copy of '.claude/settings.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/error.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/loading.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/messages/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/messages/templates/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/opportunities/[id]/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/opportunities/loading.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/opportunities/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/pipeline/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/general/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/integrations/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/layout.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/scoring/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/searches/[id]/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/(app)/settings/searches/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/globals.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/app-shell.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/brand.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/nav-links.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/page-header.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/settings-nav.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/sidebar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/topbar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/badge.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/button.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/card.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/empty-state.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/input.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/select.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/skeleton.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/table.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/tabs.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/dashboard/components/metrics-row.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/dashboard/components/priority-list.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/dashboard/components/search-activity.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/dashboard/components/search-alerts.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/dashboard/components/stat-card.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/messages/components/create-template-dialog.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/messages/components/message-composer.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/detail/add-follow-up-form.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/detail/add-note-form.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/detail/analysis-panel.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/opportunities-controls.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/opportunities-table.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/components/score-badge.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/opportunities/labels.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/pipeline/components/pipeline-card.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/features/searches/components/create-search-profile-dialog.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/format.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/utils.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/server/providers/analysis/anthropic-provider.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/server/services/analysis-service.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tailwind.config.ts', LF will be replaced by CRLF the next time Git touches it
+ .claude/settings.json                              |  16 [32m+[m[31m-[m
+ package.json                                       |   1 [32m+[m
+ src/app/(app)/error.tsx                            |  12 [32m+[m[31m-[m
+ src/app/(app)/loading.tsx                          |  17 [32m+[m[31m-[m
+ src/app/(app)/messages/page.tsx                    | 145 [32m++++++++++[m[31m-----[m
+ src/app/(app)/messages/templates/page.tsx          |  50 [32m+++[m[31m---[m
+ src/app/(app)/opportunities/[id]/page.tsx          | 194 [32m+++++++++++++[m[31m--------[m
+ src/app/(app)/opportunities/loading.tsx            |  25 [32m++[m[31m-[m
+ src/app/(app)/opportunities/page.tsx               |  17 [32m+[m[31m-[m
+ src/app/(app)/page.tsx                             |  36 [32m++[m[31m--[m
+ src/app/(app)/pipeline/page.tsx                    |  98 [32m+++++++++[m[31m--[m
+ src/app/(app)/settings/general/page.tsx            |  93 [32m++++++++[m[31m--[m
+ src/app/(app)/settings/integrations/page.tsx       |  54 [32m+++[m[31m---[m
+ src/app/(app)/settings/layout.tsx                  |   3 [32m+[m[31m-[m
+ src/app/(app)/settings/scoring/page.tsx            |  56 [32m+++[m[31m---[m
+ src/app/(app)/settings/searches/[id]/page.tsx      |  26 [32m+[m[31m--[m
+ src/app/(app)/settings/searches/page.tsx           |  51 [32m+[m[31m-----[m
+ src/app/globals.css                                |  62 [32m++++++[m[31m-[m
+ src/components/layout/app-shell.tsx                |   2 [32m+[m[31m-[m
+ src/components/layout/brand.tsx                    |  10 [32m+[m[31m-[m
+ src/components/layout/nav-links.tsx                |  23 [32m++[m[31m-[m
+ src/components/layout/page-header.tsx              |  20 [32m++[m[31m-[m
+ src/components/layout/settings-nav.tsx             |   5 [32m+[m[31m-[m
+ src/components/layout/sidebar.tsx                  |  19 [32m+[m[31m-[m
+ src/components/layout/topbar.tsx                   | 120 [32m+++++[m[31m--------[m
+ src/components/ui/badge.tsx                        |  77 [32m++++++[m[31m--[m
+ src/components/ui/button.tsx                       |  23 [32m++[m[31m-[m
+ src/components/ui/card.tsx                         |  62 [32m++++[m[31m---[m
+ src/components/ui/empty-state.tsx                  |  39 [32m+++[m[31m--[m
+ src/components/ui/input.tsx                        |  23 [32m++[m[31m-[m
+ src/components/ui/select.tsx                       |   2 [32m+[m[31m-[m
+ src/components/ui/skeleton.tsx                     |   5 [32m+[m[31m-[m
+ src/components/ui/table.tsx                        |  19 [32m+[m[31m-[m
+ src/components/ui/tabs.tsx                         |   6 [32m+[m[31m-[m
+ src/features/dashboard/components/metrics-row.tsx  |  47 [32m++[m[31m---[m
+ .../dashboard/components/priority-list.tsx         |  53 [32m+++[m[31m---[m
+ .../dashboard/components/search-activity.tsx       |  51 [32m+++[m[31m---[m
+ .../dashboard/components/search-alerts.tsx         |  71 [32m++++[m[31m----[m
+ src/features/dashboard/components/stat-card.tsx    |  80 [32m+++++[m[31m----[m
+ .../messages/components/create-template-dialog.tsx |  58 [32m++[m[31m----[m
+ .../messages/components/message-composer.tsx       |  39 [32m++[m[31m---[m
+ .../components/detail/add-follow-up-form.tsx       |   4 [32m+[m[31m-[m
+ .../components/detail/add-note-form.tsx            |   8 [32m+[m[31m-[m
+ .../components/detail/analysis-panel.tsx           | 105 [32m+++++++[m[31m----[m
+ .../components/opportunities-controls.tsx          |  44 [32m++[m[31m---[m
+ .../components/opportunities-table.tsx             | 121 [32m+++++++[m[31m------[m
+ .../opportunities/components/score-badge.tsx       |  67 [32m+++++[m[31m--[m
+ src/features/opportunities/labels.ts               |  31 [32m+++[m[31m-[m
+ src/features/pipeline/components/pipeline-card.tsx | 128 [32m+++++++++[m[31m-----[m
+ .../components/create-search-profile-dialog.tsx    |  18 [32m+[m[31m-[m
+ src/lib/format.ts                                  |  29 [32m+++[m
+ src/lib/utils.ts                                   |  29 [32m++[m[31m-[m
+ .../providers/analysis/anthropic-provider.ts       |  12 [32m+[m[31m-[m
+ src/server/services/analysis-service.ts            |  45 [32m++[m[31m---[m
+ tailwind.config.ts                                 |  51 [32m++++++[m
+ 55 files changed, 1589 insertions(+), 913 deletions(-)

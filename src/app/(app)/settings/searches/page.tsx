@@ -1,12 +1,7 @@
-import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreateSearchProfileDialog } from "@/features/searches/components/create-search-profile-dialog";
-import { ProfileStatusToggle } from "@/features/searches/components/profile-status-toggle";
-import { RunSearchButton } from "@/features/searches/components/run-search-button";
-import { formatDate } from "@/lib/format";
+import { SearchProfileCard } from "@/features/searches/components/search-profile-card";
 import { createServerContext } from "@/server/context";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +12,10 @@ export default async function SettingsSearchesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium text-text-primary">
-            Perfis de pesquisa
-          </h2>
-          <p className="text-sm text-text-secondary">
+      <div className="flex items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-heading text-text-primary">Perfis de pesquisa</h2>
+          <p className="text-meta text-text-secondary">
             Cidades, categorias e agenda de coleta.
           </p>
         </div>
@@ -36,39 +29,9 @@ export default async function SettingsSearchesPage() {
           description="Crie um perfil de pesquisa para organizar cidades e categorias."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {profiles.map((p) => (
-            <Card key={p.id}>
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/settings/searches/${p.id}`}
-                      className="text-sm font-medium text-text-primary transition-colors hover:text-accent"
-                    >
-                      {p.name}
-                    </Link>
-                    <Badge
-                      variant={p.status === "active" ? "success" : "neutral"}
-                    >
-                      {p.status === "active" ? "Ativo" : "Pausado"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-text-secondary">
-                    {p.cities.length > 0 ? p.cities.join(", ") : "Sem cidades"}{" "}
-                    · {p.category_count} categorias · limite {p.daily_limit}/dia
-                    · {p.run_time}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    Última execução: {formatDate(p.last_run_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ProfileStatusToggle id={p.id} status={p.status} />
-                  <RunSearchButton profileId={p.id} mode="run" />
-                </div>
-              </CardContent>
-            </Card>
+            <SearchProfileCard key={p.id} profile={p} />
           ))}
         </div>
       )}

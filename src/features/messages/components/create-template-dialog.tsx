@@ -5,6 +5,9 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Field } from "@/components/ui/field";
 import {
   Dialog,
   DialogTrigger,
@@ -62,53 +65,28 @@ export function CreateTemplateDialog() {
             {"{{category}}"}.
           </DialogDescription>
         </DialogHeader>
-        <form action={formAction} className="space-y-4">
-          <div className="space-y-1.5">
-            <label
-              htmlFor="tpl-name"
-              className="text-sm font-medium text-text-primary"
-            >
-              Nome
-            </label>
+        <form action={formAction} className="space-y-5">
+          <Field label="Nome" htmlFor="tpl-name">
             <Input id="tpl-name" name="name" required maxLength={120} />
-          </div>
-          <div className="space-y-1.5">
-            <label
-              htmlFor="tpl-cat"
-              className="text-sm font-medium text-text-primary"
-            >
-              Categoria
-            </label>
-            <select
-              id="tpl-cat"
-              name="category"
-              required
-              className="bg-surface-deep/40 focus-visible:border-accent/50 focus-visible:ring-accent/30 h-9 w-full rounded-control border border-border px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2"
-            >
+          </Field>
+          <Field label="Categoria" htmlFor="tpl-cat">
+            <NativeSelect id="tpl-cat" name="category" required>
               {MESSAGE_KIND.map((k) => (
                 <option key={k} value={k}>
                   {kindLabel[k]}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label
-              htmlFor="tpl-content"
-              className="text-sm font-medium text-text-primary"
-            >
-              Conteúdo
-            </label>
-            <textarea
-              id="tpl-content"
-              name="content"
-              required
-              rows={5}
-              className="bg-surface-deep/40 focus-visible:border-accent/50 focus-visible:ring-accent/30 w-full resize-none rounded-control border border-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2"
-            />
-          </div>
+            </NativeSelect>
+          </Field>
+          <Field
+            label="Conteúdo"
+            htmlFor="tpl-content"
+            hint="As variáveis são substituídas na hora de compor a mensagem."
+          >
+            <Textarea id="tpl-content" name="content" required rows={5} />
+          </Field>
           {state && !state.ok ? (
-            <p className="text-xs text-danger">{state.error}</p>
+            <p className="text-micro text-danger">{state.error}</p>
           ) : null}
           <DialogFooter>
             <DialogClose asChild>

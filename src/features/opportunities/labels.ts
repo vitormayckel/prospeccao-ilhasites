@@ -1,4 +1,5 @@
 import type { BadgeProps } from "@/components/ui/badge";
+import type { StatusTone } from "@/components/ui/status-dot";
 import type { Priority, ReviewStatus, PipelineStage } from "@/types/domain";
 
 export const priorityLabel: Record<Priority, string> = {
@@ -24,13 +25,13 @@ export const reviewStatusLabel: Record<ReviewStatus, string> = {
   snoozed: "Adiado",
 };
 
-export const reviewStatusDot: Record<ReviewStatus, string> = {
-  pending_analysis: "bg-text-muted",
-  analysis_failed: "bg-danger",
-  pending_review: "bg-info",
-  approved: "bg-success",
-  rejected: "bg-text-muted",
-  snoozed: "bg-warning",
+export const reviewStatusTone: Record<ReviewStatus, StatusTone> = {
+  pending_analysis: "neutral",
+  analysis_failed: "danger",
+  pending_review: "info",
+  approved: "success",
+  rejected: "neutral",
+  snoozed: "warning",
 };
 
 export const pipelineStageLabel: Record<PipelineStage, string> = {
@@ -42,4 +43,20 @@ export const pipelineStageLabel: Record<PipelineStage, string> = {
   negotiation: "Negociação",
   client: "Cliente",
   lost: "Perdido",
+};
+
+/*
+ * Tom por etapa. A progressão vai de neutro (entrada) a dourado (negociação,
+ * o momento que mais pede atenção) e fecha em verde (cliente). "Perdido" é
+ * deliberadamente apagado — ocupa espaço sem chamar o olho.
+ */
+export const pipelineStageTone: Record<PipelineStage, StatusTone> = {
+  new: "neutral",
+  analyzed: "neutral",
+  approved: "info",
+  first_contact: "info",
+  follow_up: "warning",
+  negotiation: "accent",
+  client: "success",
+  lost: "neutral",
 };

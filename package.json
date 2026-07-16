@@ -9,6 +9,7 @@
     "lint": "next lint",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "type-check": "tsc --noEmit",
+    "contrast:validate": "node scripts/contrast-validate.mjs",
     "db:generate-seed": "node scripts/generate-seed.mjs",
     "db:validate": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs",
     "collection:validate": "node scripts/generate-seed.mjs && node scripts/collection-validate.mjs",

@@ -46,17 +46,20 @@ export default async function OpportunitiesPage({
   return (
     <div className="space-y-8">
       <PageHeader
+        eyebrow="Fila de decisão"
         title="Oportunidades"
         description="Empresas encontradas, prontas para sua análise."
         actions={<AnalyzePendingButton pending={pendingAnalysis} />}
       />
-      <OpportunitiesControls />
-      <OpportunitiesTable rows={result.rows} />
-      <Pagination
-        page={result.page}
-        pageCount={result.pageCount}
-        total={result.total}
-      />
+      <div className="space-y-4">
+        <OpportunitiesControls />
+        <OpportunitiesTable rows={result.rows} />
+        <Pagination
+          page={result.page}
+          pageCount={result.pageCount}
+          total={result.total}
+        />
+      </div>
     </div>
   );
 }

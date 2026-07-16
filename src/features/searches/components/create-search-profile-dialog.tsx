@@ -5,6 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
 import {
   Dialog,
   DialogTrigger,
@@ -17,21 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { createSearchProfileAction } from "@/server/actions/search-profiles";
 import type { ActionResult } from "@/server/actions/opportunities";
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-sm font-medium text-text-primary">{label}</span>
-      {children}
-    </div>
-  );
-}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -102,7 +88,7 @@ export function CreateSearchProfileDialog() {
             <Input name="dailyLimit" type="number" defaultValue={50} min={1} />
           </Field>
           {state && !state.ok ? (
-            <p className="text-xs text-danger">{state.error}</p>
+            <p className="text-micro text-danger">{state.error}</p>
           ) : null}
           <DialogFooter>
             <DialogClose asChild>

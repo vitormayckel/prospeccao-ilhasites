@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MessageCircle, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Field } from "@/components/ui/field";
 import {
   Dialog,
   DialogTrigger,
@@ -155,47 +158,43 @@ export function MessageComposer({
         </DialogHeader>
 
         {templates.length === 0 ? (
-          <p className="text-sm text-text-secondary">
+          <p className="text-meta text-text-secondary">
             Nenhum template ativo.{" "}
-            <Link href="/messages/templates" className="text-accent">
+            <Link
+              href="/messages/templates"
+              className="text-accent hover:underline"
+            >
               Criar template
             </Link>
             .
           </p>
         ) : (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label
-                htmlFor="composer-template"
-                className="text-xs text-text-muted"
-              >
-                Template
-              </label>
-              <select
+          <div className="space-y-4">
+            <Field label="Template" htmlFor="composer-template">
+              <NativeSelect
                 id="composer-template"
                 value={templateId}
                 onChange={(e) => onSelectTemplate(e.target.value)}
                 disabled={!!messageId}
-                className="focus-visible:ring-accent/40 h-9 w-full rounded-control border border-border-subtle bg-surface-1 px-3 text-sm text-text-primary focus:outline-none focus-visible:ring-2"
               >
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} — {kindLabel[t.category]}
                   </option>
                 ))}
-              </select>
-            </div>
+              </NativeSelect>
+            </Field>
 
-            <textarea
+            <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               readOnly={!!messageId}
               rows={7}
               aria-label="Conteúdo da mensagem"
-              className="focus-visible:ring-accent/40 w-full resize-y rounded-control border border-border-subtle bg-surface-1 p-3 text-sm leading-relaxed text-text-primary focus:outline-none focus-visible:ring-2"
+              className="resize-y"
             />
 
-            <p className="text-xs text-text-muted">
+            <p className="text-micro text-text-muted">
               Caracteres: {content.length}
               {unresolved > 0 ? (
                 <span className="ml-2 text-warning">
@@ -206,7 +205,7 @@ export function MessageComposer({
               )}
             </p>
 
-            {error ? <p className="text-xs text-danger">{error}</p> : null}
+            {error ? <p className="text-micro text-danger">{error}</p> : null}
 
             {!messageId ? (
               <DialogFooter className="gap-2 sm:justify-between">
@@ -224,8 +223,8 @@ export function MessageComposer({
                 </Button>
               </DialogFooter>
             ) : (
-              <div className="space-y-2 border-t border-border-subtle pt-3">
-                <p className="text-sm text-text-secondary">
+              <div className="space-y-3 border-t border-border-subtle pt-4">
+                <p className="text-meta text-text-secondary">
                   Você enviou a mensagem pelo WhatsApp?
                 </p>
                 <div className="flex justify-end gap-2">

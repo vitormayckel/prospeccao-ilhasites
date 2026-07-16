@@ -36,6 +36,7 @@ interface AnthropicResponse {
   content?: Array<{ type: string; name?: string; input?: unknown }>;
   usage?: { input_tokens?: number; output_tokens?: number };
   model?: string;
+  stop_reason?: string;
 }
 
 export function createAnthropicAnalysisProvider(config: {
@@ -66,7 +67,7 @@ export function createAnthropicAnalysisProvider(config: {
           },
           body: JSON.stringify({
             model: config.model,
-            max_tokens: 2048,
+            max_tokens: 4096,
             system: ANALYSIS_SYSTEM_PROMPT,
             tools: [
               {
@@ -90,6 +91,15 @@ export function createAnthropicAnalysisProvider(config: {
         }
 
         const data = (await response.json()) as AnthropicResponse;
+
+        // Trunca por limite de tokens → tool JSON incompleto. Registra e falha
+        // de forma explícita (o serviço reprocessa e grava o motivo).
+        if (data.stop_reason === "max_tokens") {
+          throw new AnalysisError(
+            "Análise truncada: a resposta atingiu o limite de tokens (max_tokens).",
+          );
+        }
+
         const toolUse = data.content?.find(
           (block) => block.type === "tool_use" && block.name === TOOL_NAME,
         );

@@ -1,6 +1,10 @@
 import { cn } from "@/lib/utils";
 
-/** Marca do produto. O quadrado dourado é o único uso de accent em superfície. */
+/**
+ * Marca do produto. O quadrado dourado é o único uso de accent em superfície.
+ * O wordmark se distingue da navegação por tracking fechado e peso alto — a
+ * mesma lógica óptica dos títulos de página, sem trocar de família.
+ */
 function Brand({
   collapsed = false,
   className,
@@ -10,11 +14,11 @@ function Brand({
 }) {
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-accent text-sm font-bold text-black">
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-[7px] bg-accent text-[13px] font-bold leading-none text-black">
         i
       </div>
       {!collapsed ? (
-        <span className="text-sm font-semibold tracking-tight text-text-primary">
+        <span className="text-[15px] font-semibold leading-none tracking-[-0.02em] text-text-primary">
           Ilha Prospect
         </span>
       ) : null}

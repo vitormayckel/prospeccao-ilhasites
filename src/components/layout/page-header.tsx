@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 interface PageHeaderProps {
   title: string;
   description?: string;
+  /** Rótulo discreto acima do título — situa a página numa seção maior. */
+  eyebrow?: string;
   actions?: React.ReactNode;
   className?: string;
 }
@@ -12,22 +14,28 @@ interface PageHeaderProps {
 function PageHeader({
   title,
   description,
+  eyebrow,
   actions,
   className,
 }: PageHeaderProps) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
         className,
       )}
     >
-      <div className="space-y-1.5">
-        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-          {title}
-        </h1>
+      <div className="min-w-0 space-y-2">
+        {eyebrow ? (
+          /* Régua dourada curta: a assinatura que abre toda página do produto. */
+          <p className="eyebrow flex items-center gap-2.5">
+            <span aria-hidden className="bg-accent/60 h-px w-6" />
+            {eyebrow}
+          </p>
+        ) : null}
+        <h1 className="text-display text-text-primary">{title}</h1>
         {description ? (
-          <p className="text-sm leading-relaxed text-text-secondary">
+          <p className="max-w-[68ch] text-body text-text-secondary">
             {description}
           </p>
         ) : null}

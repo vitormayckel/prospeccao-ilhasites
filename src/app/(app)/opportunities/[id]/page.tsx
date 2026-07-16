@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatusDot } from "@/components/ui/status-dot";
 import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { DecisionBar } from "@/features/opportunities/components/detail/decision-bar";
 import { AddNoteForm } from "@/features/opportunities/components/detail/add-note-form";
@@ -20,9 +21,11 @@ import {
   priorityLabel,
   priorityVariant,
   reviewStatusLabel,
+  reviewStatusTone,
   pipelineStageLabel,
 } from "@/features/opportunities/labels";
-import { formatDateTime, formatDueLabel } from "@/lib/format";
+import { formatDateTime, formatDueLabel, formatDueCompact } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { createServerContext } from "@/server/context";
 import {
   resolveTemplate,
@@ -49,11 +52,14 @@ function Contact({
   value: string;
 }) {
   return (
-    <div className="flex items-start gap-3 text-sm">
-      <Icon className="mt-0.5 size-4 shrink-0 text-text-muted" />
-      <div>
-        <p className="text-xs text-text-muted">{label}</p>
-        <p className="text-text-primary">{value}</p>
+    <div className="flex items-start gap-3">
+      <Icon
+        className="mt-0.5 size-3.5 shrink-0 text-text-muted"
+        strokeWidth={1.75}
+      />
+      <div className="min-w-0">
+        <p className="text-micro text-text-muted">{label}</p>
+        <p className="break-words text-meta text-text-primary">{value}</p>
       </div>
     </div>
   );
@@ -105,42 +111,59 @@ export default async function OpportunityDetailPage({
         </Link>
       </Button>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-            {company.name}
-          </h1>
-          <p className="text-sm text-text-secondary">
-            {[company.primary_category, company.city]
-              .filter(Boolean)
-              .join(" · ") || "—"}
+      {/*
+       * Identidade primeiro, estado depois: o nome sozinho no topo, e os
+       * quatro atributos de estado numa única linha de apoio — antes eram
+       * quatro badges coloridas disputando atenção com o título.
+       */}
+      <div className="flex flex-col gap-6 border-b border-border-subtle pb-7 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-2.5">
+          <p className="eyebrow">
+            {pipelineStageLabel[company.pipeline_stage]}
           </p>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Badge variant="info">
+          {/* Mesmo degrau do PageHeader: o nome da empresa é o título desta
+           * página, e a escala precisa ser consistente entre telas. */}
+          <h1 className="text-display text-text-primary">{company.name}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-meta text-text-secondary">
+            <span>
+              {[company.primary_category, company.city]
+                .filter(Boolean)
+                .join(" · ") || "—"}
+            </span>
+            <span aria-hidden className="text-text-muted/50">
+              ·
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <StatusDot tone={reviewStatusTone[company.review_status]} />
               {reviewStatusLabel[company.review_status]}
-            </Badge>
-            <Badge variant="neutral">
-              {pipelineStageLabel[company.pipeline_stage]}
-            </Badge>
-            <Badge variant={priorityVariant[company.priority]}>
-              {priorityLabel[company.priority]}
-            </Badge>
-            {company.score !== null ? (
-              <ScoreBadge score={company.score} />
+            </span>
+            {company.priority === "high" || company.priority === "urgent" ? (
+              <Badge variant={priorityVariant[company.priority]}>
+                {priorityLabel[company.priority]}
+              </Badge>
             ) : null}
           </div>
         </div>
-        <DecisionBar
-          companyId={company.id}
-          reviewStatus={company.review_status}
-        />
+
+        <div className="flex shrink-0 items-end gap-6">
+          {company.score !== null ? (
+            <div>
+              <p className="eyebrow mb-2">Score</p>
+              <ScoreBadge score={company.score} size="lg" />
+            </div>
+          ) : null}
+          <DecisionBar
+            companyId={company.id}
+            reviewStatus={company.review_status}
+          />
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {/* Análise */}
           <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle>Análise comercial</CardTitle>
               <AnalyzeButton companyId={company.id} hasAnalysis={!!output} />
             </CardHeader>
@@ -149,6 +172,7 @@ export default async function OpportunityDetailPage({
                 <AnalysisPanel output={output} />
               ) : (
                 <EmptyState
+                  variant="inline"
                   title={
                     analysisFailed
                       ? "Falha na análise"
@@ -160,7 +184,6 @@ export default async function OpportunityDetailPage({
                         "A análise falhou. Você pode reprocessar.")
                       : "Esta empresa ainda não possui uma análise de IA concluída."
                   }
-                  className="border-none py-8"
                 />
               )}
             </CardContent>
@@ -173,25 +196,33 @@ export default async function OpportunityDetailPage({
             </CardHeader>
             <CardContent className="p-0">
               {pipelineEvents.length === 0 ? (
-                <div className="px-5 pb-5">
-                  <EmptyState
-                    title="Sem movimentações"
-                    className="border-none py-8"
-                  />
-                </div>
+                <EmptyState variant="inline" title="Sem movimentações" />
               ) : (
-                <ul className="divide-y divide-border-subtle">
+                <ul className="divide-y divide-border-subtle border-t border-border-subtle">
                   {pipelineEvents.map((e) => (
                     <li
                       key={e.id}
-                      className="flex items-center justify-between px-5 py-3 text-sm"
+                      className="flex items-center justify-between gap-3 px-5 py-3 text-meta"
                     >
-                      <span className="text-text-primary">
-                        {e.from_stage
-                          ? `${pipelineStageLabel[e.from_stage]} → ${pipelineStageLabel[e.to_stage]}`
-                          : pipelineStageLabel[e.to_stage]}
+                      <span className="min-w-0 text-text-primary">
+                        {e.from_stage ? (
+                          <>
+                            <span className="text-text-muted">
+                              {pipelineStageLabel[e.from_stage]}
+                            </span>
+                            <span
+                              aria-hidden
+                              className="mx-1.5 text-text-muted"
+                            >
+                              →
+                            </span>
+                            {pipelineStageLabel[e.to_stage]}
+                          </>
+                        ) : (
+                          pipelineStageLabel[e.to_stage]
+                        )}
                       </span>
-                      <span className="text-xs text-text-muted">
+                      <span className="shrink-0 text-micro text-text-muted">
                         {formatDateTime(e.created_at)}
                       </span>
                     </li>
@@ -265,7 +296,7 @@ export default async function OpportunityDetailPage({
                 </p>
               )}
               {lastMessage ? (
-                <p className="text-xs text-text-muted">
+                <p className="text-micro text-text-muted">
                   Última mensagem: {messageStatusLabel[lastMessage.status]} ·{" "}
                   {formatDateTime(
                     lastMessage.sent_at ??
@@ -285,33 +316,44 @@ export default async function OpportunityDetailPage({
             <CardContent className="space-y-4">
               <AddFollowUpForm companyId={company.id} />
               {followUps.length > 0 ? (
-                <ul className="space-y-2 border-t border-border-subtle pt-3">
-                  {followUps.map((f) => (
-                    <li key={f.id} className="text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-text-primary">
-                          {formatDueLabel(f.due_at)}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <Badge
-                            variant={
-                              f.status === "completed" ? "success" : "warning"
-                            }
+                <ul className="divide-y divide-border-subtle border-t border-border-subtle">
+                  {followUps.map((f) => {
+                    const due = formatDueCompact(f.due_at);
+                    const pending = f.status === "pending";
+                    return (
+                      <li key={f.id} className="py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            title={formatDueLabel(f.due_at)}
+                            className={cn(
+                              "min-w-0 truncate text-meta",
+                              !pending
+                                ? "text-text-muted line-through"
+                                : due.overdue
+                                  ? "font-medium text-danger"
+                                  : "text-text-primary",
+                            )}
                           >
-                            {f.status === "completed"
-                              ? "concluído"
-                              : "pendente"}
-                          </Badge>
-                          {f.status === "pending" ? (
-                            <CompleteFollowUpButton followUpId={f.id} />
-                          ) : null}
+                            {due.label}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {pending ? (
+                              <CompleteFollowUpButton followUpId={f.id} />
+                            ) : (
+                              <Badge variant="success" tone="quiet">
+                                concluído
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      {f.notes ? (
-                        <p className="text-xs text-text-muted">{f.notes}</p>
-                      ) : null}
-                    </li>
-                  ))}
+                        {f.notes ? (
+                          <p className="mt-1 text-micro text-text-muted">
+                            {f.notes}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
             </CardContent>
@@ -325,11 +367,13 @@ export default async function OpportunityDetailPage({
             <CardContent className="space-y-4">
               <AddNoteForm companyId={company.id} />
               {notes.length > 0 ? (
-                <ul className="space-y-3 border-t border-border-subtle pt-3">
+                <ul className="divide-y divide-border-subtle border-t border-border-subtle">
                   {notes.map((n) => (
-                    <li key={n.id} className="text-sm">
-                      <p className="text-text-secondary">{n.content}</p>
-                      <p className="mt-0.5 text-xs text-text-muted">
+                    <li key={n.id} className="py-3">
+                      <p className="text-meta leading-relaxed text-text-secondary">
+                        {n.content}
+                      </p>
+                      <p className="mt-1 text-micro text-text-muted">
                         {formatDateTime(n.created_at)}
                       </p>
                     </li>

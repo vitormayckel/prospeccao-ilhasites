@@ -18,18 +18,18 @@
       "Bash(mkdir *)",
       "Bash(bash .claude/hooks/welcome.sh)"
     ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(sudo *)",
-      "Bash(curl *)",
-      "Bash(wget *)"
-    ]
+    "deny": ["Bash(rm -rf *)", "Bash(sudo *)", "Bash(curl *)", "Bash(wget *)"]
   },
   "hooks": {
     "SessionStart": [
       {
-        "type": "command",
-        "command": "bash .claude/hooks/welcome.sh"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/welcome.sh"
+          }
+        ]
       }
     ]
   }

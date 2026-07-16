@@ -34,6 +34,35 @@ export function formatAgo(iso: string | null | undefined): string {
   return `há ${days} ${days === 1 ? "dia" : "dias"}`;
 }
 
+export interface DueInfo {
+  label: string;
+  overdue: boolean;
+  today: boolean;
+}
+
+/**
+ * Vencimento em forma compacta, para cards e listas densas onde não cabe a
+ * data por extenso. A data completa fica no title/tooltip de quem usa.
+ */
+export function formatDueCompact(iso: string): DueInfo {
+  const diffDays = Math.round(
+    (new Date(iso).getTime() - Date.now()) / 86400000,
+  );
+  if (diffDays < 0) {
+    const days = Math.abs(diffDays);
+    return {
+      label: `Atrasado ${days} ${days === 1 ? "dia" : "dias"}`,
+      overdue: true,
+      today: false,
+    };
+  }
+  if (diffDays === 0) return { label: "Hoje", overdue: false, today: true };
+  if (diffDays === 1) return { label: "Amanhã", overdue: false, today: false };
+  if (diffDays < 7)
+    return { label: `Em ${diffDays} dias`, overdue: false, today: false };
+  return { label: formatDate(iso), overdue: false, today: false };
+}
+
 /** Rótulo relativo curto para vencimentos (hoje, atrasado, em N dias). */
 export function formatDueLabel(iso: string): string {
   const due = new Date(iso).getTime();
