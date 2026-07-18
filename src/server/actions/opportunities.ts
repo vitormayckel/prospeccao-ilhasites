@@ -9,7 +9,15 @@ import {
   createNoteInputSchema,
 } from "@/lib/validation/company";
 import { createFollowUpInputSchema } from "@/lib/validation/follow-up";
-import type { Priority } from "@/types/domain";
+import {
+  APPROACH_CHANNEL,
+  CONTACT_ROLE,
+  NEXT_ACTION_STATUS,
+  type Priority,
+  type ApproachChannel,
+  type ContactRole,
+  type NextActionStatus,
+} from "@/types/domain";
 
 export interface ActionResult {
   ok: boolean;
@@ -108,6 +116,81 @@ export async function setPriorityAction(
     const input = setPriorityInputSchema.parse({ companyId, priority });
     const { services } = await createServerContext();
     await services.review.setPriority(input);
+    revalidateOpportunity(companyId);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+// --- Classificações operacionais (Sprint 4) ---------------------------
+// Cada alteração grava um evento em audit_events (entity_type='company'),
+// que o Timeline da oportunidade agrega. Não altera fluxo de mensagens.
+
+export async function setApproachChannelAction(
+  companyId: string,
+  value: ApproachChannel,
+): Promise<ActionResult> {
+  try {
+    if (!APPROACH_CHANNEL.includes(value)) throw new Error("Canal inválido.");
+    const { repositories } = await createServerContext();
+    const before = await repositories.companies.findById(companyId);
+    if (!before) throw new Error("Empresa não encontrada.");
+    await repositories.companies.setApproachChannel(companyId, value);
+    await repositories.audit.log({
+      entityType: "company",
+      entityId: companyId,
+      action: "approach_channel_changed",
+      metadata: { from: before.approach_channel, to: value },
+    });
+    revalidateOpportunity(companyId);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function setContactRoleAction(
+  companyId: string,
+  value: ContactRole | null,
+): Promise<ActionResult> {
+  try {
+    if (value !== null && !CONTACT_ROLE.includes(value))
+      throw new Error("Classificação inválida.");
+    const { repositories } = await createServerContext();
+    const before = await repositories.companies.findById(companyId);
+    if (!before) throw new Error("Empresa não encontrada.");
+    await repositories.companies.setContactRole(companyId, value);
+    await repositories.audit.log({
+      entityType: "company",
+      entityId: companyId,
+      action: "contact_role_changed",
+      metadata: { from: before.contact_role, to: value },
+    });
+    revalidateOpportunity(companyId);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function setNextActionStatusAction(
+  companyId: string,
+  value: NextActionStatus | null,
+): Promise<ActionResult> {
+  try {
+    if (value !== null && !NEXT_ACTION_STATUS.includes(value))
+      throw new Error("Status inválido.");
+    const { repositories } = await createServerContext();
+    const before = await repositories.companies.findById(companyId);
+    if (!before) throw new Error("Empresa não encontrada.");
+    await repositories.companies.setNextActionStatus(companyId, value);
+    await repositories.audit.log({
+      entityType: "company",
+      entityId: companyId,
+      action: "next_action_changed",
+      metadata: { from: before.next_action_status, to: value },
+    });
     revalidateOpportunity(companyId);
     return { ok: true };
   } catch (error) {

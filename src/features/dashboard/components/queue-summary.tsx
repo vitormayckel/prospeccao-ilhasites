@@ -35,9 +35,9 @@ export function QueueSummaryStrip({ summary }: { summary: QueueSummary }) {
       <span aria-hidden className="bg-accent/40 absolute inset-x-0 top-0 h-px" />
       <div className="grid grid-cols-2 gap-px bg-border-subtle sm:grid-cols-3 xl:grid-cols-6">
         {items.map((item) => (
-          <div key={item.label} className="bg-surface-1 px-4 py-5">
+          <div key={item.label} className="bg-surface-1 px-4 py-3.5">
             <p className="eyebrow truncate">{item.label}</p>
-            <p className={cn("tnum mt-3 text-heading", valueTone[item.tone])}>
+            <p className={cn("tnum mt-2 text-heading", valueTone[item.tone])}>
               {item.value}
             </p>
           </div>

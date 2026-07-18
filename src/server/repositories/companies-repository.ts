@@ -8,10 +8,14 @@ import type {
   MessageRow,
   FollowUpRow,
   PipelineEventRow,
+  AuditEventRow,
   PipelineStage,
   Priority,
   ReviewStatus,
   ContactStage,
+  ApproachChannel,
+  ContactRole,
+  NextActionStatus,
 } from "@/types/domain";
 import type { OpportunityFilters } from "@/lib/validation/company";
 
@@ -32,6 +36,7 @@ export interface CompanyDetail {
   messages: MessageRow[];
   followUps: FollowUpRow[];
   pipelineEvents: PipelineEventRow[];
+  auditEvents: AuditEventRow[];
 }
 
 const PRIORITY_RANK = `case c.priority when 'urgent' then 4 when 'high' then 3 when 'normal' then 2 else 1 end`;
@@ -113,37 +118,49 @@ export function createCompaniesRepository(db: Db) {
       const company = await findById(id);
       if (!company) return null;
 
-      const [sources, analyses, decisions, notes, messages, followUps, events] =
-        await Promise.all([
-          db.query<CompanySourceRow>(
-            "select * from company_sources where company_id = $1 order by collected_at desc",
-            [id],
-          ),
-          db.query<AiAnalysisRow>(
-            "select * from ai_analyses where company_id = $1 order by created_at desc",
-            [id],
-          ),
-          db.query<CompanyDecisionRow>(
-            "select * from company_decisions where company_id = $1 order by created_at desc",
-            [id],
-          ),
-          db.query<CompanyNoteRow>(
-            "select * from company_notes where company_id = $1 and deleted_at is null order by created_at desc",
-            [id],
-          ),
-          db.query<MessageRow>(
-            "select * from messages where company_id = $1 order by created_at desc",
-            [id],
-          ),
-          db.query<FollowUpRow>(
-            "select * from follow_ups where company_id = $1 and deleted_at is null order by due_at asc",
-            [id],
-          ),
-          db.query<PipelineEventRow>(
-            "select * from pipeline_events where company_id = $1 order by created_at desc",
-            [id],
-          ),
-        ]);
+      const [
+        sources,
+        analyses,
+        decisions,
+        notes,
+        messages,
+        followUps,
+        events,
+        auditEvents,
+      ] = await Promise.all([
+        db.query<CompanySourceRow>(
+          "select * from company_sources where company_id = $1 order by collected_at desc",
+          [id],
+        ),
+        db.query<AiAnalysisRow>(
+          "select * from ai_analyses where company_id = $1 order by created_at desc",
+          [id],
+        ),
+        db.query<CompanyDecisionRow>(
+          "select * from company_decisions where company_id = $1 order by created_at desc",
+          [id],
+        ),
+        db.query<CompanyNoteRow>(
+          "select * from company_notes where company_id = $1 and deleted_at is null order by created_at desc",
+          [id],
+        ),
+        db.query<MessageRow>(
+          "select * from messages where company_id = $1 order by created_at desc",
+          [id],
+        ),
+        db.query<FollowUpRow>(
+          "select * from follow_ups where company_id = $1 and deleted_at is null order by due_at asc",
+          [id],
+        ),
+        db.query<PipelineEventRow>(
+          "select * from pipeline_events where company_id = $1 order by created_at desc",
+          [id],
+        ),
+        db.query<AuditEventRow>(
+          "select * from audit_events where entity_type = 'company' and entity_id = $1 order by created_at desc",
+          [id],
+        ),
+      ]);
 
       return {
         company,
@@ -154,6 +171,7 @@ export function createCompaniesRepository(db: Db) {
         messages,
         followUps,
         pipelineEvents: events,
+        auditEvents,
       };
     },
 
@@ -207,6 +225,41 @@ export function createCompaniesRepository(db: Db) {
       const rows = await db.query<CompanyRow>(
         "update companies set priority = $1, updated_at = now() where id = $2 returning *",
         [priority, id],
+      );
+      return rows[0]!;
+    },
+
+    /** Classificações operacionais da Sprint 4 (canal, interlocutor, próxima
+     *  ação). Uma coluna por chamada, todas em companies. */
+    async setApproachChannel(
+      id: string,
+      value: ApproachChannel,
+    ): Promise<CompanyRow> {
+      const rows = await db.query<CompanyRow>(
+        "update companies set approach_channel = $1, updated_at = now() where id = $2 returning *",
+        [value, id],
+      );
+      return rows[0]!;
+    },
+
+    async setContactRole(
+      id: string,
+      value: ContactRole | null,
+    ): Promise<CompanyRow> {
+      const rows = await db.query<CompanyRow>(
+        "update companies set contact_role = $1, updated_at = now() where id = $2 returning *",
+        [value, id],
+      );
+      return rows[0]!;
+    },
+
+    async setNextActionStatus(
+      id: string,
+      value: NextActionStatus | null,
+    ): Promise<CompanyRow> {
+      const rows = await db.query<CompanyRow>(
+        "update companies set next_action_status = $1, updated_at = now() where id = $2 returning *",
+        [value, id],
       );
       return rows[0]!;
     },

@@ -3,6 +3,7 @@ import {
   Building2,
   KanbanSquare,
   MessageSquare,
+  BarChart3,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +31,12 @@ export const mainNav: NavItem[] = [
     href: "/messages",
     icon: MessageSquare,
     matchPrefixes: ["/messages"],
+  },
+  {
+    label: "Relatórios",
+    href: "/reports",
+    icon: BarChart3,
+    matchPrefixes: ["/reports"],
   },
   {
     label: "Configurações",

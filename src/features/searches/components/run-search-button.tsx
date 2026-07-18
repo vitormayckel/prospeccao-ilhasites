@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Play, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAsyncAction } from "@/lib/hooks/use-async-action";
 import {
+  RunSummary,
+  type RunSummaryData,
+} from "@/features/searches/components/run-summary";
+import {
   runSearchAction,
   testSearchProfileAction,
-  type RunSearchActionResult,
 } from "@/server/actions/search-profiles";
 
 interface RunSearchButtonProps {
@@ -15,34 +19,32 @@ interface RunSearchButtonProps {
   size?: "sm" | "md";
 }
 
-/** Dispara a coleta (ou o teste sem persistir) e mostra o resumo do resultado. */
+/** Dispara a coleta (ou o teste sem persistir) e mostra o resumo transparente
+ *  da execução — o funil completo de Solicitadas a Importadas (Sprint 2). */
 export function RunSearchButton({
   profileId,
   mode = "run",
   size = "sm",
 }: RunSearchButtonProps) {
-  const { isPending, error, message, run } = useAsyncAction();
-
-  function summaryLabel(result: RunSearchActionResult): string {
-    const s = result.summary;
-    if (!s) return "";
-    return s.reusedExistingRun
-      ? "Execução já realizada hoje (idempotente)."
-      : `${mode === "test" ? "Simulação" : "Coleta"}: ${s.newCompanies} novas · ${s.duplicates} duplicadas · ${s.suppressed} bloqueadas · ${s.failedItems} falhas.`;
-  }
+  const { isPending, error, run } = useAsyncAction();
+  const [summary, setSummary] = useState<RunSummaryData | null>(null);
 
   function onClick() {
+    setSummary(null);
     run(
       () =>
         mode === "test"
           ? testSearchProfileAction(profileId)
           : runSearchAction(profileId),
-      { successMessage: summaryLabel, refresh: mode === "run" },
+      {
+        refresh: mode === "run",
+        onSuccess: (result) => setSummary(result.summary ?? null),
+      },
     );
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col items-end gap-1.5">
       <Button
         variant={mode === "test" ? "ghost" : "secondary"}
         size={size}
@@ -58,8 +60,8 @@ export function RunSearchButton({
       </Button>
       {error ? (
         <span className="text-xs text-danger">{error}</span>
-      ) : message ? (
-        <span className="text-xs text-text-secondary">{message}</span>
+      ) : summary ? (
+        <RunSummary data={summary} mode={mode} />
       ) : null}
     </div>
   );

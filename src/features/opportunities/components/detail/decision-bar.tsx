@@ -39,6 +39,7 @@ export function DecisionBar({
     return (
       <Button
         variant="secondary"
+        size="lg"
         disabled={isPending}
         onClick={() =>
           run(() => reactivateCompanyAction(companyId, "Reativado manualmente"))
@@ -53,8 +54,10 @@ export function DecisionBar({
   if (!canDecide) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2.5">
       <Button
+        size="lg"
+        className="min-w-[7rem]"
         disabled={isPending}
         onClick={() => run(() => approveCompanyAction(companyId))}
       >
@@ -63,6 +66,8 @@ export function DecisionBar({
       </Button>
       <Button
         variant="secondary"
+        size="lg"
+        className="min-w-[6rem]"
         disabled={isPending}
         onClick={() => run(() => snoozeCompanyAction(companyId, 7))}
       >
@@ -71,6 +76,8 @@ export function DecisionBar({
       </Button>
       <Button
         variant="outline"
+        size="lg"
+        className="min-w-[6rem]"
         disabled={isPending}
         onClick={() => run(() => rejectCompanyAction(companyId))}
       >

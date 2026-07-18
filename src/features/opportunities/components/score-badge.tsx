@@ -8,6 +8,14 @@ function scoreTone(score: number): { text: string; bar: string } {
   return { text: "text-text-muted", bar: "bg-text-muted" };
 }
 
+/** Rótulo de prioridade derivado da faixa do score (leitura de relance). */
+function scoreLabel(score: number): string {
+  if (score >= 80) return "Alta prioridade";
+  if (score >= 65) return "Boa oportunidade";
+  if (score >= 45) return "Média prioridade";
+  return "Baixa prioridade";
+}
+
 interface ScoreBadgeProps {
   score: number;
   /** Sem o medidor o score vira só número — para linhas muito densas. */
@@ -60,4 +68,37 @@ function ScoreBadge({
   );
 }
 
-export { ScoreBadge, scoreTone };
+/*
+ * Score como manchete (tela de detalhe): número grande na cor da faixa, com o
+ * rótulo de prioridade logo abaixo e um medidor fino. É o elemento de maior
+ * destaque da página — o operador lê a prioridade antes de qualquer texto.
+ */
+function ScoreHeadline({ score }: { score: number }) {
+  const tone = scoreTone(score);
+  const clamped = Math.min(Math.max(score, 0), 100);
+  return (
+    <div className="flex flex-col items-start" title={`Score ${score} de 100`}>
+      <span className="eyebrow mb-1.5">Score</span>
+      <span className="flex items-baseline gap-1.5">
+        <span className={cn("tnum font-mono text-kpi leading-none", tone.text)}>
+          {score}
+        </span>
+        <span className="text-meta text-text-muted">/100</span>
+      </span>
+      <span
+        aria-hidden
+        className="mt-2 block h-1 w-28 overflow-hidden rounded-full bg-surface-3"
+      >
+        <span
+          className={cn("block h-full rounded-full", tone.bar)}
+          style={{ width: `${clamped}%` }}
+        />
+      </span>
+      <span className={cn("mt-2 text-meta font-medium", tone.text)}>
+        {scoreLabel(score)}
+      </span>
+    </div>
+  );
+}
+
+export { ScoreBadge, ScoreHeadline, scoreTone, scoreLabel };

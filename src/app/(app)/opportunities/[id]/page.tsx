@@ -6,13 +6,16 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/ui/status-dot";
-import { ScoreBadge } from "@/features/opportunities/components/score-badge";
+import { ScoreHeadline } from "@/features/opportunities/components/score-badge";
 import { DecisionBar } from "@/features/opportunities/components/detail/decision-bar";
 import { AddNoteForm } from "@/features/opportunities/components/detail/add-note-form";
 import { AddFollowUpForm } from "@/features/opportunities/components/detail/add-follow-up-form";
 import { CompleteFollowUpButton } from "@/features/opportunities/components/detail/complete-follow-up-button";
 import { AnalyzeButton } from "@/features/opportunities/components/detail/analyze-button";
 import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
+import { Timeline } from "@/features/opportunities/components/detail/timeline";
+import { CommercialControls } from "@/features/opportunities/components/detail/commercial-controls";
+import { buildTimeline } from "@/features/opportunities/lib/build-timeline";
 import { ContactFlow } from "@/features/opportunities/components/detail/contact-flow";
 import {
   priorityLabel,
@@ -69,8 +72,8 @@ export default async function OpportunityDetailPage({
   const detail = await repositories.companies.getDetail(params.id);
   if (!detail) notFound();
 
-  const { company, analyses, notes, followUps, pipelineEvents, messages } =
-    detail;
+  const { company, analyses, notes, followUps, messages } = detail;
+  const timeline = buildTimeline(detail);
   const analysis = analyses.find((a) => a.status === "completed");
   const output = analysis?.output as ProspectAnalysis | null | undefined;
   const lastAnalysis = analyses[0];
@@ -139,12 +142,9 @@ export default async function OpportunityDetailPage({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-end gap-6">
+        <div className="flex shrink-0 flex-col items-start gap-6 sm:flex-row sm:items-end sm:gap-8">
           {company.score !== null ? (
-            <div>
-              <p className="eyebrow mb-2">Score</p>
-              <ScoreBadge score={company.score} size="lg" />
-            </div>
+            <ScoreHeadline score={company.score} />
           ) : null}
           <DecisionBar
             companyId={company.id}
@@ -183,45 +183,16 @@ export default async function OpportunityDetailPage({
             </CardContent>
           </Card>
 
-          {/* Histórico */}
+          {/* Histórico — timeline cronológico (Sprint 4) */}
           <Card>
             <CardHeader>
               <CardTitle>Histórico</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              {pipelineEvents.length === 0 ? (
+            <CardContent>
+              {timeline.length === 0 ? (
                 <EmptyState variant="inline" title="Sem movimentações" />
               ) : (
-                <ul className="divide-y divide-border-subtle border-t border-border-subtle">
-                  {pipelineEvents.map((e) => (
-                    <li
-                      key={e.id}
-                      className="flex items-center justify-between gap-3 px-5 py-3 text-meta"
-                    >
-                      <span className="min-w-0 text-text-primary">
-                        {e.from_stage ? (
-                          <>
-                            <span className="text-text-muted">
-                              {pipelineStageLabel[e.from_stage]}
-                            </span>
-                            <span
-                              aria-hidden
-                              className="mx-1.5 text-text-muted"
-                            >
-                              →
-                            </span>
-                            {pipelineStageLabel[e.to_stage]}
-                          </>
-                        ) : (
-                          pipelineStageLabel[e.to_stage]
-                        )}
-                      </span>
-                      <span className="shrink-0 text-micro text-text-muted">
-                        {formatDateTime(e.created_at)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <Timeline events={timeline} />
               )}
             </CardContent>
           </Card>
@@ -267,6 +238,21 @@ export default async function OpportunityDetailPage({
                   value={`${company.rating} (${company.reviews_count ?? 0})`}
                 />
               ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Operação comercial — classificação (Sprint 4 §2/§3/§4) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Operação comercial</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CommercialControls
+                companyId={company.id}
+                approachChannel={company.approach_channel}
+                contactRole={company.contact_role}
+                nextActionStatus={company.next_action_status}
+              />
             </CardContent>
           </Card>
 

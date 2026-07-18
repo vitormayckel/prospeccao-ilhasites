@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { ProfileActionsMenu } from "@/features/searches/components/profile-actions-menu";
 import { RunSearchButton } from "@/features/searches/components/run-search-button";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface SearchProfileCardProps {
@@ -18,7 +18,23 @@ interface SearchProfileCardProps {
     daily_limit: number;
     run_time: string;
     last_run_at: string | null;
+    last_run_finished_at: string | null;
+    last_run_new_companies: number | null;
+    last_run_duplicates: number | null;
+    last_run_failed_items: number | null;
   };
+}
+
+/** Métrica compacta do bloco "Última coleta". */
+function LastRunStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-micro text-text-muted">{label}: </span>
+      <span className="tnum font-mono text-micro font-medium text-text-secondary">
+        {value}
+      </span>
+    </div>
+  );
 }
 
 /** Célula de leitura rápida do rodapé do card. */
@@ -99,7 +115,13 @@ export function SearchProfileCard({ profile: p }: SearchProfileCardProps) {
           value={String(p.cities.length)}
           detail={p.cities.length > 0 ? p.cities.join(", ") : "Sem cidades"}
         />
-        <Spec label="Categorias" value={String(p.category_count)} />
+        <Spec
+          label="Categorias"
+          value={String(p.category_count)}
+          detail={
+            p.categories.length > 0 ? p.categories.join(", ") : "Sem categorias"
+          }
+        />
         <Spec label="Limite diário" value={`${p.daily_limit}/dia`} />
         <Spec
           label="Execução"
@@ -107,6 +129,34 @@ export function SearchProfileCard({ profile: p }: SearchProfileCardProps) {
           detail={`Última: ${formatDate(p.last_run_at)}`}
         />
       </div>
+
+      {p.last_run_finished_at ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border-subtle px-5 py-3">
+          <span className="text-micro font-medium text-text-secondary">
+            Última coleta
+          </span>
+          <span className="tnum text-micro text-text-muted">
+            {formatDateTime(p.last_run_finished_at)}
+          </span>
+          <span aria-hidden className="text-text-muted/40">
+            ·
+          </span>
+          <LastRunStat label="Solicitadas" value={p.daily_limit} />
+          <LastRunStat label="Importadas" value={p.last_run_new_companies ?? 0} />
+          <LastRunStat
+            label="Descartadas"
+            value={
+              (p.last_run_duplicates ?? 0) + (p.last_run_failed_items ?? 0)
+            }
+          />
+          <Link
+            href={`/settings/searches/${p.id}`}
+            className="ml-auto shrink-0 text-micro font-medium text-accent outline-none transition-colors hover:underline focus-visible:underline"
+          >
+            Ver detalhes
+          </Link>
+        </div>
+      ) : null}
     </Card>
   );
 }

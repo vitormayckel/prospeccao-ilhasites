@@ -1,3 +1,11 @@
+import {
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
+  MessageSquareQuote,
+  CircleSlash,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ProspectAnalysis } from "@/types/domain";
@@ -17,19 +25,33 @@ const CONFIDENCE_LABEL: Record<ProspectAnalysis["confidence"], string> = {
   low: "confiança baixa",
 };
 
-function EvidenceList({
+/*
+ * Cada eixo da análise vira um cartão próprio com ícone e cor — assim os
+ * quatro blocos se leem de relance em vez de fundir num texto único.
+ */
+function EvidenceCard({
   title,
   items,
+  icon: Icon,
+  iconClass,
   dotClass,
 }: {
   title: string;
   items: ProspectAnalysis["positives"];
+  icon: LucideIcon;
+  iconClass: string;
   dotClass: string;
 }) {
   if (items.length === 0) return null;
   return (
-    <div>
-      <p className="eyebrow mb-3">{title}</p>
+    <section className="rounded-card border border-border-subtle bg-surface-1 p-4">
+      <header className="mb-3 flex items-center gap-2">
+        <Icon className={cn("size-4 shrink-0", iconClass)} strokeWidth={2} />
+        <h4 className="text-label text-text-primary">{title}</h4>
+        <span className="tnum ml-auto text-micro text-text-muted">
+          {items.length}
+        </span>
+      </header>
       <ul className="space-y-2 text-meta leading-relaxed text-text-secondary">
         {items.map((item, i) => (
           <li key={i} className="flex gap-2.5">
@@ -41,7 +63,7 @@ function EvidenceList({
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
@@ -100,32 +122,46 @@ export function AnalysisPanel({ output }: { output: ProspectAnalysis }) {
         </div>
       </div>
 
-      <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
-        <EvidenceList
+      <div className="grid gap-3 sm:grid-cols-2">
+        <EvidenceCard
           title="Pontos positivos"
           items={output.positives}
+          icon={CheckCircle2}
+          iconClass="text-success"
           dotClass="bg-success"
         />
-        <EvidenceList
+        <EvidenceCard
           title="Pontos de atenção"
           items={output.risks}
+          icon={AlertTriangle}
+          iconClass="text-warning"
           dotClass="bg-warning"
         />
-        <EvidenceList
+        <EvidenceCard
           title="Oportunidades"
           items={output.opportunities}
+          icon={TrendingUp}
+          iconClass="text-accent"
           dotClass="bg-accent"
         />
-        <EvidenceList
+        <EvidenceCard
           title="Argumentos de venda"
           items={output.sales_arguments}
+          icon={MessageSquareQuote}
+          iconClass="text-info"
           dotClass="bg-info"
         />
       </div>
 
       {output.missing_data.length > 0 ? (
-        <div>
-          <p className="eyebrow mb-3">Dados ausentes</p>
+        <section className="rounded-card border border-border-subtle bg-surface-1 p-4">
+          <header className="mb-3 flex items-center gap-2">
+            <CircleSlash
+              className="size-4 shrink-0 text-text-muted"
+              strokeWidth={2}
+            />
+            <h4 className="text-label text-text-primary">Dados ausentes</h4>
+          </header>
           <div className="flex flex-wrap gap-1.5">
             {output.missing_data.map((m, i) => (
               <Badge key={i} variant="outline">
@@ -133,7 +169,7 @@ export function AnalysisPanel({ output }: { output: ProspectAnalysis }) {
               </Badge>
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
 
       {output.cautions.length > 0 ? (

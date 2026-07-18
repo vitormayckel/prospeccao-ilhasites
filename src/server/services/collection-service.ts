@@ -38,11 +38,15 @@ export interface RunSearchInput {
 export interface RunSearchResult {
   run: SearchRunRow | null;
   status: SearchRunRow["status"];
+  /** Teto de novos candidatos pedido para a execução (RN-10 = daily_limit). */
+  requested: number;
   resultsSeen: number;
   newCompanies: number;
   duplicates: number;
   suppressed: number;
   failedItems: number;
+  /** Importadas sem telefone — flag de contatabilidade, não descarte. */
+  noPhone: number;
   estimatedCost: number;
   reusedExistingRun: boolean;
   error?: string;
@@ -100,11 +104,13 @@ export function createCollectionService(deps: {
       return {
         run: null,
         status: "failed",
+        requested: 0,
         resultsSeen: 0,
         newCompanies: 0,
         duplicates: 0,
         suppressed: 0,
         failedItems: 0,
+        noPhone: 0,
         estimatedCost: 0,
         reusedExistingRun: false,
         error: "Perfil de pesquisa não encontrado.",
@@ -125,11 +131,13 @@ export function createCollectionService(deps: {
         return {
           run: existing,
           status: existing.status,
+          requested: profile.daily_limit,
           resultsSeen: existing.results_seen,
           newCompanies: existing.new_companies,
           duplicates: existing.duplicates,
           suppressed: 0,
           failedItems: existing.failed_items,
+          noPhone: 0,
           estimatedCost: existing.estimated_cost,
           reusedExistingRun: true,
         };
@@ -149,6 +157,7 @@ export function createCollectionService(deps: {
     let duplicates = 0;
     let suppressed = 0;
     let failedItems = 0;
+    let noPhone = 0;
     let estimatedCost = 0;
 
     try {
@@ -195,8 +204,12 @@ export function createCollectionService(deps: {
                 run?.id,
                 input.dryRun,
               );
-              if (outcome2 === "new") newCompanies++;
-              else duplicates++;
+              if (outcome2 === "new") {
+                newCompanies++;
+                // Observacional: importada mas sem telefone (não contactável
+                // por WhatsApp). Não altera o que é importado.
+                if (!candidate.phoneE164 && !candidate.phoneRaw) noPhone++;
+              } else duplicates++;
             } catch {
               failedItems++;
             }
@@ -220,11 +233,13 @@ export function createCollectionService(deps: {
         return {
           run: finished,
           status,
+          requested: profile.daily_limit,
           resultsSeen,
           newCompanies,
           duplicates,
           suppressed,
           failedItems,
+          noPhone,
           estimatedCost,
           reusedExistingRun: false,
         };
@@ -233,11 +248,13 @@ export function createCollectionService(deps: {
       return {
         run: null,
         status,
+        requested: profile.daily_limit,
         resultsSeen,
         newCompanies,
         duplicates,
         suppressed,
         failedItems,
+        noPhone,
         estimatedCost,
         reusedExistingRun: false,
       };
@@ -259,11 +276,13 @@ export function createCollectionService(deps: {
       return {
         run,
         status: "failed",
+        requested: profile.daily_limit,
         resultsSeen,
         newCompanies,
         duplicates,
         suppressed,
         failedItems,
+        noPhone,
         estimatedCost,
         reusedExistingRun: false,
         error: message,

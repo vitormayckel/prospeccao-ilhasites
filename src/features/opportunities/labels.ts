@@ -1,6 +1,13 @@
 import type { BadgeProps } from "@/components/ui/badge";
 import type { StatusTone } from "@/components/ui/status-dot";
-import type { Priority, ReviewStatus, PipelineStage } from "@/types/domain";
+import type {
+  Priority,
+  ReviewStatus,
+  PipelineStage,
+  ApproachChannel,
+  ContactRole,
+  NextActionStatus,
+} from "@/types/domain";
 
 export const priorityLabel: Record<Priority, string> = {
   low: "Baixa",
@@ -59,4 +66,30 @@ export const pipelineStageTone: Record<PipelineStage, StatusTone> = {
   negotiation: "accent",
   client: "success",
   lost: "neutral",
+};
+
+// Operação comercial / CRM (Sprint 4) -----------------------------------
+export const approachChannelLabel: Record<ApproachChannel, string> = {
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+};
+
+export const contactRoleLabel: Record<ContactRole, string> = {
+  no_reply: "Não respondeu",
+  reception: "Recepção",
+  secretary: "Secretária",
+  commercial: "Comercial",
+  owner: "Dono",
+  partner: "Sócio",
+  manager: "Gerente",
+  other: "Outro",
+};
+
+export const nextActionStatusLabel: Record<NextActionStatus, string> = {
+  awaiting_reply: "Aguardando resposta",
+  do_follow_up: "Fazer Follow-up",
+  send_proposal: "Enviar proposta",
+  call: "Ligar",
+  schedule_meeting: "Agendar reunião",
+  closed: "Encerrado",
 };

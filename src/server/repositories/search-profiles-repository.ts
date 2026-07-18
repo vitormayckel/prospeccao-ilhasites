@@ -13,6 +13,13 @@ export interface SearchProfileListItem extends SearchProfileRow {
   cities: string[];
   categories: string[];
   category_count: number;
+  /** Resumo da execução mais recente (Sprint 2), null se nunca coletou. */
+  last_run_finished_at: string | null;
+  last_run_status: string | null;
+  last_run_results_seen: number | null;
+  last_run_new_companies: number | null;
+  last_run_duplicates: number | null;
+  last_run_failed_items: number | null;
 }
 
 export interface SearchProfileDetail {
@@ -37,11 +44,27 @@ export function createSearchProfilesRepository(db: Db) {
               '{}'
             ) as categories,
             (select count(*)::int from search_profile_categories x
-               where x.search_profile_id = sp.id and x.active) as category_count
+               where x.search_profile_id = sp.id and x.active) as category_count,
+            r.finished_at as last_run_finished_at,
+            r.status as last_run_status,
+            r.results_seen as last_run_results_seen,
+            r.new_companies as last_run_new_companies,
+            r.duplicates as last_run_duplicates,
+            r.failed_items as last_run_failed_items
           from search_profiles sp
           left join search_profile_locations l on l.search_profile_id = sp.id
+          left join lateral (
+            select finished_at, status, results_seen, new_companies,
+                   duplicates, failed_items
+              from search_runs
+              where search_profile_id = sp.id
+                and status in ('completed', 'partial')
+              order by created_at desc
+              limit 1
+          ) r on true
           where sp.deleted_at is null
-          group by sp.id
+          group by sp.id, r.finished_at, r.status, r.results_seen,
+                   r.new_companies, r.duplicates, r.failed_items
           order by sp.created_at desc`,
       );
     },

@@ -14,6 +14,8 @@ import { createProfilesRepository } from "@/server/repositories/profiles-reposit
 import { createCollectionRepository } from "@/server/repositories/collection-repository";
 import { createAiAnalysesRepository } from "@/server/repositories/ai-analyses-repository";
 import { createHealthRepository } from "@/server/repositories/health-repository";
+import { createAuditRepository } from "@/server/repositories/audit-repository";
+import { createReportsRepository } from "@/server/repositories/reports-repository";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 import { createCollectionService } from "@/server/services/collection-service";
@@ -46,6 +48,8 @@ export async function createServerContext(options?: {
   const collection = createCollectionRepository(db);
   const aiAnalyses = createAiAnalysesRepository(db);
   const healthRepo = createHealthRepository(db);
+  const audit = createAuditRepository(db);
+  const reports = createReportsRepository(db);
 
   const review = createReviewService({
     companies,
@@ -90,6 +94,8 @@ export async function createServerContext(options?: {
       collection,
       aiAnalyses,
       health: healthRepo,
+      audit,
+      reports,
     },
     services: {
       review,

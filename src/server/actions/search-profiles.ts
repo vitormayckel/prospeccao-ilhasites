@@ -121,11 +121,13 @@ export async function deleteSearchProfileAction(
 export interface RunSearchActionResult extends ActionResult {
   summary?: {
     status: string;
+    requested: number;
     resultsSeen: number;
     newCompanies: number;
     duplicates: number;
     suppressed: number;
     failedItems: number;
+    noPhone: number;
     reusedExistingRun: boolean;
   };
 }
@@ -149,11 +151,13 @@ export async function runSearchAction(
       ok: true,
       summary: {
         status: result.status,
+        requested: result.requested,
         resultsSeen: result.resultsSeen,
         newCompanies: result.newCompanies,
         duplicates: result.duplicates,
         suppressed: result.suppressed,
         failedItems: result.failedItems,
+        noPhone: result.noPhone,
         reusedExistingRun: result.reusedExistingRun,
       },
     };
@@ -182,11 +186,13 @@ export async function testSearchProfileAction(
       ok: true,
       summary: {
         status: result.status,
+        requested: result.requested,
         resultsSeen: result.resultsSeen,
         newCompanies: result.newCompanies,
         duplicates: result.duplicates,
         suppressed: result.suppressed,
         failedItems: result.failedItems,
+        noPhone: result.noPhone,
         reusedExistingRun: result.reusedExistingRun,
       },
     };

@@ -97,6 +97,32 @@ export const CONTACT_STAGE = [
 ] as const;
 export type ContactStage = (typeof CONTACT_STAGE)[number];
 
+// Operação comercial / CRM (Sprint 4, migration 0006) --------------------
+export const APPROACH_CHANNEL = ["whatsapp", "instagram"] as const;
+export type ApproachChannel = (typeof APPROACH_CHANNEL)[number];
+
+export const CONTACT_ROLE = [
+  "no_reply",
+  "reception",
+  "secretary",
+  "commercial",
+  "owner",
+  "partner",
+  "manager",
+  "other",
+] as const;
+export type ContactRole = (typeof CONTACT_ROLE)[number];
+
+export const NEXT_ACTION_STATUS = [
+  "awaiting_reply",
+  "do_follow_up",
+  "send_proposal",
+  "call",
+  "schedule_meeting",
+  "closed",
+] as const;
+export type NextActionStatus = (typeof NEXT_ACTION_STATUS)[number];
+
 export const MESSAGE_STATUS = [
   "draft",
   "opened",
@@ -242,6 +268,9 @@ export type CompanyRow = Timestamps & {
   pipeline_stage: PipelineStage;
   review_status: ReviewStatus;
   contact_stage: ContactStage;
+  approach_channel: ApproachChannel;
+  contact_role: ContactRole | null;
+  next_action_status: NextActionStatus | null;
   priority: Priority;
   score: number | null;
   next_action_at: string | null;
@@ -350,6 +379,16 @@ export type PipelineEventRow = {
   from_stage: PipelineStage | null;
   to_stage: PipelineStage;
   reason: string | null;
+  created_at: string;
+};
+
+export type AuditEventRow = {
+  id: string;
+  actor_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
   created_at: string;
 };
 
