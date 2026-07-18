@@ -4,10 +4,14 @@ import type {
   SearchProfileLocationRow,
   SearchProfileCategoryRow,
 } from "@/types/domain";
-import type { SearchProfileInput } from "@/lib/validation/search-profile";
+import type {
+  SearchProfileInput,
+  UpdateSearchProfileInput,
+} from "@/lib/validation/search-profile";
 
 export interface SearchProfileListItem extends SearchProfileRow {
   cities: string[];
+  categories: string[];
   category_count: number;
 }
 
@@ -26,6 +30,12 @@ export function createSearchProfilesRepository(db: Db) {
               array_agg(distinct l.city) filter (where l.city is not null),
               '{}'
             ) as cities,
+            coalesce(
+              (select array_agg(c.label order by c.label)
+                 from search_profile_categories c
+                 where c.search_profile_id = sp.id and c.active),
+              '{}'
+            ) as categories,
             (select count(*)::int from search_profile_categories x
                where x.search_profile_id = sp.id and x.active) as category_count
           from search_profiles sp
@@ -90,6 +100,100 @@ export function createSearchProfilesRepository(db: Db) {
         );
       }
       return profile;
+    },
+
+    /**
+     * Edita um perfil (RF-03). Campos escalares são atualizados quando
+     * presentes; localidades e categorias, quando enviadas, substituem as
+     * atuais por completo (o dialog sempre manda a lista final).
+     */
+    async update(input: UpdateSearchProfileInput): Promise<void> {
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      const push = (col: string, value: unknown) => {
+        values.push(value);
+        sets.push(`${col} = $${values.length}`);
+      };
+      if (input.name !== undefined) push("name", input.name);
+      if (input.status !== undefined) push("status", input.status);
+      if (input.weekdays !== undefined) push("weekdays", input.weekdays);
+      if (input.runTime !== undefined) push("run_time", input.runTime);
+      if (input.timezone !== undefined) push("timezone", input.timezone);
+      if (input.dailyLimit !== undefined) push("daily_limit", input.dailyLimit);
+      if (input.radiusMeters !== undefined)
+        push("radius_meters", input.radiusMeters);
+      if (input.minRating !== undefined) push("min_rating", input.minRating);
+
+      if (sets.length > 0) {
+        values.push(input.id);
+        await db.query(
+          `update search_profiles set ${sets.join(", ")}, updated_at = now()
+           where id = $${values.length} and deleted_at is null`,
+          values,
+        );
+      }
+
+      if (input.locations !== undefined) {
+        await db.query(
+          "delete from search_profile_locations where search_profile_id = $1",
+          [input.id],
+        );
+        for (const loc of input.locations) {
+          await db.query(
+            `insert into search_profile_locations (search_profile_id, city, state, country_code)
+             values ($1, $2, $3, $4)`,
+            [input.id, loc.city, loc.state, loc.countryCode],
+          );
+        }
+      }
+
+      if (input.categories !== undefined) {
+        await db.query(
+          "delete from search_profile_categories where search_profile_id = $1",
+          [input.id],
+        );
+        for (const cat of input.categories) {
+          await db.query(
+            `insert into search_profile_categories (search_profile_id, label, provider_category)
+             values ($1, $2, $3)`,
+            [input.id, cat.label, cat.providerCategory ?? null],
+          );
+        }
+      }
+    },
+
+    /** Duplica um perfil com suas localidades e categorias ("Cópia de …"). */
+    async duplicate(id: string): Promise<SearchProfileRow | null> {
+      const detail = await this.getDetail(id);
+      if (!detail) return null;
+      const { profile, locations, categories } = detail;
+      return this.create({
+        name: `Cópia de ${profile.name}`.slice(0, 160),
+        status: "paused",
+        weekdays: profile.weekdays,
+        runTime: profile.run_time,
+        timezone: profile.timezone,
+        dailyLimit: profile.daily_limit,
+        radiusMeters: profile.radius_meters ?? undefined,
+        minRating: profile.min_rating ?? undefined,
+        locations: locations.map((l) => ({
+          city: l.city,
+          state: l.state,
+          countryCode: l.country_code,
+        })),
+        categories: categories.map((c) => ({
+          label: c.label,
+          providerCategory: c.provider_category ?? undefined,
+        })),
+      });
+    },
+
+    /** Remoção lógica (mantém histórico de execuções e proveniência). */
+    async softDelete(id: string): Promise<void> {
+      await db.query(
+        "update search_profiles set deleted_at = now(), updated_at = now() where id = $1",
+        [id],
+      );
     },
 
     async setStatus(
