@@ -78,6 +78,47 @@ export function createAiAnalysesRepository(db: Db) {
       );
     },
 
+    /**
+     * Recupera análises presas em `running` (§8/§11).
+     *
+     * Causa: a função serverless é encerrada pela Vercel no meio do lote e a
+     * linha nunca sai de `running` — a empresa fica "Em análise" para sempre e
+     * uma nova tentativa criaria uma segunda linha `running` para a mesma
+     * empresa. Marca como falha expirada, liberando reprocessamento.
+     *
+     * Idempotente e não destrutivo: preserva a linha, o snapshot de entrada e
+     * o histórico. A empresa continua em `pending_analysis` (o status só muda
+     * ao concluir), então volta naturalmente para a fila.
+     */
+    async recoverStaleRunning(staleAfterMinutes: number): Promise<number> {
+      const minutes = Math.max(1, Math.floor(staleAfterMinutes));
+      const rows = await db.query<{ id: string }>(
+        `update ai_analyses set
+           status = 'failed',
+           error_message = coalesce(error_message,
+             'Análise expirada: execução interrompida antes de concluir.'),
+           completed_at = now(),
+           updated_at = now()
+         where status = 'running'
+           and coalesce(started_at, created_at) < now() - ($1 || ' minutes')::interval
+         returning id`,
+        [String(minutes)],
+      );
+      return rows.length;
+    },
+
+    /** Análises presas em `running` além do limite — leitura para diagnóstico. */
+    async countStaleRunning(staleAfterMinutes: number): Promise<number> {
+      const minutes = Math.max(1, Math.floor(staleAfterMinutes));
+      const rows = await db.query<{ c: number }>(
+        `select count(*)::int as c from ai_analyses
+         where status = 'running'
+           and coalesce(started_at, created_at) < now() - ($1 || ' minutes')::interval`,
+        [String(minutes)],
+      );
+      return rows[0]?.c ?? 0;
+    },
+
     /** Empresas aguardando análise (RF-07). */
     async listCompaniesPendingAnalysis(limit: number): Promise<CompanyRow[]> {
       return db.query<CompanyRow>(

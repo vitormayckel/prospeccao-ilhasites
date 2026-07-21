@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { StatusDot } from "@/components/ui/status-dot";
 import { ProfileActionsMenu } from "@/features/searches/components/profile-actions-menu";
-import { RunSearchButton } from "@/features/searches/components/run-search-button";
+import { StartProspectButton } from "@/features/searches/components/start-prospect-button";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,12 @@ interface SearchProfileCardProps {
     name: string;
     status: "active" | "paused";
     cities: string[];
+    locations: {
+      city: string;
+      state: string;
+      stateName: string | null;
+      ibgeCode: number | null;
+    }[];
     categories: string[];
     category_count: number;
     weekdays: number[];
@@ -93,13 +99,20 @@ export function SearchProfileCard({ profile: p }: SearchProfileCardProps) {
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <RunSearchButton profileId={p.id} mode="run" />
+          <StartProspectButton profileId={p.id} targetQualified={p.daily_limit} />
           <ProfileActionsMenu
             profile={{
               id: p.id,
               name: p.name,
               status: p.status,
-              cities: p.cities,
+              locations: (p.locations ?? [])
+                .filter((l) => l.ibgeCode !== null)
+                .map((l) => ({
+                  city: l.city,
+                  state: l.state,
+                  stateName: l.stateName ?? l.state,
+                  ibgeCode: l.ibgeCode as number,
+                })),
               categories: p.categories,
               weekdays: p.weekdays,
               run_time: p.run_time,

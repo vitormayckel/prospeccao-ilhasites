@@ -9,6 +9,15 @@ import { NextResponse, type NextRequest } from "next/server";
 // =====================================================================
 
 export function middleware(request: NextRequest): NextResponse {
+  // As rotas internas de jobs não passam pelo Basic Auth: quem as chama é o
+  // Cron da Vercel ou o encadeamento do próprio pipeline, que não têm como
+  // apresentar credenciais de navegador. Elas têm autenticação própria por
+  // segredo compartilhado (ver src/app/api/jobs/*/route.ts) e negam por
+  // padrão quando o segredo não está configurado.
+  if (request.nextUrl.pathname.startsWith("/api/jobs")) {
+    return NextResponse.next();
+  }
+
   const user = process.env.BASIC_AUTH_USER;
   const password = process.env.BASIC_AUTH_PASSWORD;
 

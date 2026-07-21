@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import {
   decisionInputSchema,
   reactivateInputSchema,
@@ -33,7 +34,7 @@ function revalidateOpportunity(companyId?: string) {
 
 function fail(error: unknown): ActionResult {
   const message =
-    error instanceof Error ? error.message : "Erro ao processar a ação.";
+    toActionError("action.opportunities", error, "Erro ao processar a ação.");
   return { ok: false, error: message };
 }
 

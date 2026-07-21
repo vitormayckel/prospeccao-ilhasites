@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import {
   templateInputSchema,
   updateTemplateInputSchema,
@@ -54,7 +55,7 @@ export async function createTemplateAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao criar template.",
+      error: toActionError("action.createTemplate", error, "Erro ao criar template."),
     };
   }
 }
@@ -92,7 +93,7 @@ export async function updateTemplateAction(
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao editar template.",
+        toActionError("action.updateTemplate", error, "Erro ao editar template."),
     };
   }
 }
@@ -111,7 +112,7 @@ export async function setTemplateActiveAction(
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao atualizar template.",
+        toActionError("action.toggleTemplate", error, "Erro ao atualizar template."),
     };
   }
 }
@@ -126,7 +127,7 @@ export async function deleteTemplateAction(id: string): Promise<ActionResult> {
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao excluir template.",
+        toActionError("action.deleteTemplate", error, "Erro ao excluir template."),
     };
   }
 }

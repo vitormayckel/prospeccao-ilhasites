@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import { movePipelineInputSchema } from "@/lib/validation/company";
 import type { ActionResult } from "@/server/actions/opportunities";
 import type { PipelineStage } from "@/types/domain";
@@ -31,7 +32,7 @@ export async function moveStageAction(
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao mover no pipeline.",
+        toActionError("action.pipeline", error, "Erro ao mover no pipeline."),
     };
   }
 }

@@ -2,18 +2,69 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import {
   searchProfileInputSchema,
   updateSearchProfileInputSchema,
 } from "@/lib/validation/search-profile";
 import type { ActionResult } from "@/server/actions/opportunities";
 import type { SearchProfileStatus } from "@/types/domain";
+import { findExact, resolveByName } from "@/server/services/municipios";
 
 function splitList(value: FormDataEntryValue | null): string[] {
   return String(value ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * Lê as localidades vindas do seletor estruturado (JSON com cidade+UF+IBGE)
+ * e reconfere cada uma contra a base do IBGE.
+ *
+ * A reconferência no servidor é o que garante o requisito "não permitir
+ * execução com cidade sem UF validada": o cliente pode ser burlado, esta
+ * checagem não.
+ */
+function parseLocations(value: FormDataEntryValue | null) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value ?? "[]"));
+  } catch {
+    throw new Error("Seleção de cidades inválida. Refaça a seleção.");
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Selecione ao menos uma cidade na lista.");
+  }
+
+  return parsed.map((raw) => {
+    const item = raw as { city?: unknown; state?: unknown };
+    const city = String(item.city ?? "").trim();
+    const state = String(item.state ?? "")
+      .trim()
+      .toUpperCase();
+
+    const municipio = findExact(city, state);
+    if (!municipio) {
+      const options = resolveByName(city);
+      if (options.length > 1) {
+        throw new Error(
+          `"${city}" existe em ${options.map((o) => o.state).join(", ")}. Escolha a opção correta na lista.`,
+        );
+      }
+      throw new Error(
+        `"${city} — ${state || "sem UF"}" não confere com a base de municípios do IBGE.`,
+      );
+    }
+
+    return {
+      city: municipio.city,
+      state: municipio.state,
+      countryCode: "BR",
+      ibgeCode: municipio.ibgeCode,
+      stateName: municipio.stateName,
+    };
+  });
 }
 
 /** Dias da semana marcados no formulário (1=seg … 7=dom). */
@@ -28,15 +79,14 @@ export async function createSearchProfileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    const state = String(formData.get("state") ?? "ES").toUpperCase();
-    const cities = splitList(formData.get("cities"));
     const categories = splitList(formData.get("categories"));
 
     const input = searchProfileInputSchema.parse({
       name: formData.get("name"),
       runTime: formData.get("runTime") || "07:00",
       dailyLimit: Number(formData.get("dailyLimit") || 50),
-      locations: cities.map((city) => ({ city, state, countryCode: "BR" })),
+      // Cidade e UF vêm juntas do seletor e são reconferidas no servidor.
+      locations: parseLocations(formData.get("locations")),
       categories: categories.map((label) => ({ label })),
     });
 
@@ -47,7 +97,7 @@ export async function createSearchProfileAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao criar perfil.",
+      error: toActionError("action.createSearchProfile", error, "Erro ao criar perfil."),
     };
   }
 }
@@ -57,8 +107,6 @@ export async function updateSearchProfileAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
-    const state = String(formData.get("state") ?? "ES").toUpperCase();
-    const cities = splitList(formData.get("cities"));
     const categories = splitList(formData.get("categories"));
     const weekdays = parseWeekdays(formData.getAll("weekdays"));
 
@@ -68,7 +116,7 @@ export async function updateSearchProfileAction(
       runTime: formData.get("runTime") || "07:00",
       weekdays: weekdays.length > 0 ? weekdays : undefined,
       dailyLimit: Number(formData.get("dailyLimit") || 50),
-      locations: cities.map((city) => ({ city, state, countryCode: "BR" })),
+      locations: parseLocations(formData.get("locations")),
       categories: categories.map((label) => ({ label })),
     });
 
@@ -80,7 +128,7 @@ export async function updateSearchProfileAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao salvar perfil.",
+      error: toActionError("action.updateSearchProfile", error, "Erro ao salvar perfil."),
     };
   }
 }
@@ -97,7 +145,7 @@ export async function duplicateSearchProfileAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao duplicar.",
+      error: toActionError("action.duplicateSearchProfile", error, "Erro ao duplicar."),
     };
   }
 }
@@ -113,7 +161,7 @@ export async function deleteSearchProfileAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao excluir.",
+      error: toActionError("action.deleteSearchProfile", error, "Erro ao excluir."),
     };
   }
 }
@@ -165,7 +213,7 @@ export async function runSearchAction(
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao executar a coleta.",
+        toActionError("action.runSearch", error, "Erro ao executar a coleta."),
     };
   }
 }
@@ -200,7 +248,7 @@ export async function testSearchProfileAction(
     return {
       ok: false,
       error:
-        error instanceof Error ? error.message : "Erro ao testar o perfil.",
+        toActionError("action.testSearchProfile", error, "Erro ao testar o perfil."),
     };
   }
 }
@@ -220,7 +268,7 @@ export async function toggleSearchProfileStatusAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao atualizar.",
+      error: toActionError("action.updateSearchProfileStatus", error, "Erro ao atualizar."),
     };
   }
 }

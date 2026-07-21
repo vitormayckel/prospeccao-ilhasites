@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,10 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  CitySelector,
+  type SelectedCity,
+} from "@/features/searches/components/city-selector";
 import { updateSearchProfileAction } from "@/server/actions/search-profiles";
 import type { ActionResult } from "@/server/actions/opportunities";
 import { cn } from "@/lib/utils";
@@ -32,7 +36,8 @@ const WEEKDAYS: { value: number; label: string }[] = [
 export interface EditableProfile {
   id: string;
   name: string;
-  cities: string[];
+  /** Localidades estruturadas (cidade + UF + IBGE). */
+  locations: SelectedCity[];
   categories: string[];
   weekdays: number[];
   run_time: string;
@@ -59,6 +64,7 @@ export function EditSearchProfileDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [cities, setCities] = useState<SelectedCity[]>(profile.locations);
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
     updateSearchProfileAction,
     null,
@@ -67,6 +73,11 @@ export function EditSearchProfileDialog({
   useEffect(() => {
     if (state?.ok) onOpenChange(false);
   }, [state, onOpenChange]);
+
+  // Reabrir o dialog deve refletir o perfil atual, não a edição anterior.
+  useEffect(() => {
+    if (open) setCities(profile.locations);
+  }, [open, profile.locations]);
 
   const selected = new Set(profile.weekdays);
 
@@ -84,13 +95,9 @@ export function EditSearchProfileDialog({
           <Field label="Nome">
             <Input name="name" required defaultValue={profile.name} />
           </Field>
-          <Field label="Cidades (separadas por vírgula)">
-            <Input
-              name="cities"
-              required
-              defaultValue={profile.cities.join(", ")}
-              placeholder="Vitória, Vila Velha, Serra"
-            />
+          {/* UF sempre vem do município selecionado — sem texto livre. */}
+          <Field label="Cidades">
+            <CitySelector value={cities} onChange={setCities} />
           </Field>
           <Field label="Categorias (separadas por vírgula)">
             <Input

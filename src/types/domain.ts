@@ -414,3 +414,79 @@ export type JobQueueRow = Timestamps & {
   locked_at: string | null;
   last_error: string | null;
 };
+
+/**
+ * Fases explícitas do pipeline de prospecção (migration 0007).
+ * Persistidas em job_queue.phase — é a máquina de estados que permite
+ * retomar exatamente de onde o tick anterior parou.
+ */
+export const JOB_PHASES = [
+  "SEARCH",
+  "NORMALIZE",
+  "DEDUP",
+  "ANALYZE",
+  "QUALIFY",
+  "SEARCH_REPLACEMENTS",
+  "FINISHED",
+] as const;
+export type JobPhase = (typeof JOB_PHASES)[number];
+
+/** job_queue estendida pela migration 0007 (pipeline persistente). */
+export type JobRow = JobQueueRow & {
+  phase: JobPhase;
+  locked_by: string | null;
+  lock_expires_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  search_profile_id: string | null;
+  search_run_id: string | null;
+  error_detail: string | null;
+  cursor_combo: number;
+  cursor_page: number;
+  current_city: string | null;
+  current_state: string | null;
+  current_term: string | null;
+  target_qualified: number;
+  results_raw: number;
+  count_new: number;
+  count_existing: number;
+  count_duplicate: number;
+  count_invalid: number;
+  count_suppressed: number;
+  count_analyzed: number;
+  count_qualified: number;
+  count_disqualified: number;
+  count_failed: number;
+  count_replacements: number;
+  max_provider_calls: number;
+  max_ai_calls: number;
+  used_provider_calls: number;
+  used_ai_calls: number;
+  deadline_at: string | null;
+  finish_reason: string | null;
+};
+
+/** Estágio do candidato na área intermediária entre SEARCH e ANALYZE. */
+export type JobCandidateStage =
+  | "pending_normalize"
+  | "pending_dedup"
+  | "new"
+  | "existing"
+  | "duplicate"
+  | "suppressed"
+  | "invalid";
+
+export type JobCandidateRow = Timestamps & {
+  id: string;
+  job_id: string;
+  provider: string;
+  external_id: string | null;
+  normalized: Record<string, unknown>;
+  raw_payload: Record<string, unknown>;
+  stage: JobCandidateStage;
+  company_id: string | null;
+  reason: string | null;
+  city: string | null;
+  state: string | null;
+  term: string | null;
+};

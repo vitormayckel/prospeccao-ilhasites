@@ -120,6 +120,78 @@ assert(failed.review_status === "analysis_failed", "falha após retries -> analy
 const costRow = (await q("select cost_estimate from ai_analyses where id=$1", [running.id]))[0];
 assert(Number(costRow.cost_estimate) === 0, "cost_estimate default numérico (0 no fixture)");
 
+// ---------------------------------------------------------------------
+// FASE 1 — recuperação de análises presas em `running` (§8/§11).
+// Reproduz o cenário real: a função serverless é encerrada no meio do lote
+// e a linha nunca sai de `running`, deixando a empresa "Em análise" para
+// sempre e bloqueando o reprocessamento.
+// ---------------------------------------------------------------------
+const staleCompany = (
+  await q(
+    `insert into companies (name, normalized_name, primary_category, city, state,
+       review_status, pipeline_stage)
+     values ('Empresa Presa','empresa presa','Serviços','Vitoria','ES',
+       'pending_analysis','new')
+     returning *`,
+  )
+)[0];
+
+// uma análise interrompida há 30 minutos e outra iniciada agora
+const staleRun = (
+  await q(
+    `insert into ai_analyses (company_id, status, prompt_version, provider, started_at)
+     values ($1,'running','2026-07-14.1','anthropic', now() - interval '30 minutes')
+     returning *`,
+    [staleCompany.id],
+  )
+)[0];
+const freshRun = (
+  await q(
+    `insert into ai_analyses (company_id, status, prompt_version, provider, started_at)
+     values ($1,'running','2026-07-14.1','anthropic', now())
+     returning *`,
+    [staleCompany.id],
+  )
+)[0];
+
+const STALE_SQL = `update ai_analyses set
+     status = 'failed',
+     error_message = coalesce(error_message,
+       'Análise expirada: execução interrompida antes de concluir.'),
+     completed_at = now(), updated_at = now()
+   where status = 'running'
+     and coalesce(started_at, created_at) < now() - ($1 || ' minutes')::interval
+   returning id`;
+
+const recovered = await q(STALE_SQL, ["10"]);
+assert(
+  recovered.some((r) => r.id === staleRun.id),
+  "análise expirada (>10min) é recuperada e marcada como failed",
+);
+assert(
+  !recovered.some((r) => r.id === freshRun.id),
+  "análise em andamento recente NÃO é recuperada indevidamente",
+);
+
+const staleAfter = (await q("select * from ai_analyses where id=$1", [staleRun.id]))[0];
+assert(staleAfter.status === "failed", "linha expirada sai de running");
+assert(
+  staleAfter.error_message && staleAfter.error_message.includes("expirada"),
+  "motivo da expiração é registrado para auditoria",
+);
+assert(staleAfter.input_snapshot !== undefined, "snapshot de entrada é preservado (não destrutivo)");
+
+// a empresa continua elegível para nova análise, sem duplicar registro
+const staleCompanyAfter = (await q("select review_status from companies where id=$1", [staleCompany.id]))[0];
+assert(
+  staleCompanyAfter.review_status === "pending_analysis",
+  "empresa volta à fila (pending_analysis) sem criar empresa duplicada",
+);
+
+// idempotência: rodar de novo não altera mais nada
+const secondPass = await q(STALE_SQL, ["10"]);
+assert(secondPass.length === 0, "recuperação é idempotente (segunda passagem não altera nada)");
+
 console.log(
   failures === 0
     ? "\n✅ Camada de IA validada (persistência, invariante de score, transições, constraints)."

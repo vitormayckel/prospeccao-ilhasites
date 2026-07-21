@@ -16,6 +16,10 @@ import {
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  CitySelector,
+  type SelectedCity,
+} from "@/features/searches/components/city-selector";
 import { createSearchProfileAction } from "@/server/actions/search-profiles";
 import type { ActionResult } from "@/server/actions/opportunities";
 
@@ -30,13 +34,17 @@ function SubmitButton() {
 
 export function CreateSearchProfileDialog() {
   const [open, setOpen] = useState(false);
+  const [cities, setCities] = useState<SelectedCity[]>([]);
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
     createSearchProfileAction,
     null,
   );
 
   useEffect(() => {
-    if (state?.ok) setOpen(false);
+    if (state?.ok) {
+      setOpen(false);
+      setCities([]);
+    }
   }, [state]);
 
   return (
@@ -62,20 +70,12 @@ export function CreateSearchProfileDialog() {
               placeholder="Ex.: Grande Vitória — serviços"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="UF">
-              <Input name="state" defaultValue="ES" maxLength={2} />
-            </Field>
-            <Field label="Horário">
-              <Input name="runTime" type="time" defaultValue="07:00" />
-            </Field>
-          </div>
-          <Field label="Cidades (separadas por vírgula)">
-            <Input
-              name="cities"
-              required
-              placeholder="Vitória, Vila Velha, Serra"
-            />
+          {/* Não há mais campo de UF: ela vem do município selecionado. */}
+          <Field label="Cidades">
+            <CitySelector value={cities} onChange={setCities} />
+          </Field>
+          <Field label="Horário">
+            <Input name="runTime" type="time" defaultValue="07:00" />
           </Field>
           <Field label="Categorias (separadas por vírgula)">
             <Input

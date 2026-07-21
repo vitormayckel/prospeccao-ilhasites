@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import type { ActionResult } from "@/server/actions/opportunities";
 
 function revalidateContact(companyId: string) {
@@ -16,7 +17,7 @@ function revalidateContact(companyId: string) {
 function fail(error: unknown): ActionResult {
   return {
     ok: false,
-    error: error instanceof Error ? error.message : "Erro ao processar a ação.",
+    error: toActionError("action.contact", error, "Erro ao processar a ação."),
   };
 }
 

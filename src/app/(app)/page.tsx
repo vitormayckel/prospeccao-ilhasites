@@ -1,67 +1,107 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { QueueSummaryStrip } from "@/features/dashboard/components/queue-summary";
-import { TodayQueue } from "@/features/dashboard/components/today-queue";
 import { SearchActivity } from "@/features/dashboard/components/search-activity";
 import { MetricsRow } from "@/features/dashboard/components/metrics-row";
+import { ExecutionProgress } from "@/features/dashboard/components/execution-progress";
+import { EmptyState } from "@/components/ui/empty-state";
+import { UnavailableState } from "@/components/ui/unavailable-state";
 import { createServerContext } from "@/server/context";
+import { safeQuery } from "@/server/safe-query";
 
 export const dynamic = "force-dynamic";
 
-function greeting(): string {
-  // Fuso America/Sao_Paulo — coerente com a Fila de Hoje.
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      hour12: false,
-      hourCycle: "h23",
-      timeZone: "America/Sao_Paulo",
-    }).format(new Date()),
-  );
-  if (hour < 12) return "Bom dia";
-  if (hour < 18) return "Boa tarde";
-  return "Boa noite";
-}
-
+/**
+ * Visão geral — resumo executivo da operação.
+ *
+ * Sem saudação, sem frase introdutória e sem a lista de tarefas, que apenas
+ * repetia o que a página de Oportunidades já faz. Cada bloco é lido de forma
+ * independente: uma consulta com falha degrada só o seu card, nunca a página.
+ */
 export default async function DashboardPage() {
-  const { repositories } = await createServerContext();
-  const [queueSummary, queue, latestSearch, metrics] = await Promise.all([
-    repositories.dashboard.getQueueSummary(),
-    repositories.dashboard.getTodayQueue(),
-    repositories.dashboard.getLatestSearch(),
-    repositories.dashboard.getMonthlyMetrics(),
+  const context = await safeQuery("dashboard.context", createServerContext);
+
+  if (!context.ok) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Visão geral" />
+        <UnavailableState
+          message={context.message}
+          correlationId={context.correlationId}
+        />
+      </div>
+    );
+  }
+
+  const { repositories } = context.data;
+  const [queueSummary, latestSearch, metrics, recentJobs] = await Promise.all([
+    safeQuery("dashboard.queueSummary", () =>
+      repositories.dashboard.getQueueSummary(),
+    ),
+    safeQuery("dashboard.latestSearch", () =>
+      repositories.dashboard.getLatestSearch(),
+    ),
+    safeQuery("dashboard.monthlyMetrics", () =>
+      repositories.dashboard.getMonthlyMetrics(),
+    ),
+    safeQuery("dashboard.recentJobs", () => repositories.jobs.listRecent(1)),
   ]);
 
+  const currentJob = recentJobs.ok ? (recentJobs.data[0] ?? null) : null;
+
   return (
-    <div className="space-y-10">
-      <PageHeader
-        eyebrow="Visão geral"
-        title={greeting()}
-        description="Sua fila de hoje, em ordem de prioridade."
-      />
+    <div className="space-y-6">
+      <PageHeader title="Visão geral" />
 
-      <QueueSummaryStrip summary={queueSummary} />
+      {/* 1. Execução atual — o que a máquina está fazendo agora */}
+      {currentJob ? (
+        <ExecutionProgress initialJob={currentJob} />
+      ) : recentJobs.ok ? (
+        <EmptyState
+          title="Nenhuma execução ainda"
+          description="Ao iniciar uma prospecção, o progresso aparece aqui em tempo real."
+        />
+      ) : (
+        <UnavailableState
+          message={recentJobs.message}
+          correlationId={recentJobs.correlationId}
+        />
+      )}
 
-      <section className="space-y-5">
-        <div className="flex items-center justify-between gap-3">
-          <SectionLabel>Fila de hoje</SectionLabel>
-          {queue.length > 0 ? (
-            <span className="text-micro text-text-muted">
-              <span className="tnum font-medium text-text-secondary">
-                {queue.length}
-              </span>{" "}
-              {queue.length === 1 ? "tarefa" : "tarefas"}
-            </span>
-          ) : null}
-        </div>
-        <TodayQueue items={queue} />
+      {/* 2. Estado da operação comercial */}
+      <section className="space-y-3">
+        <SectionLabel>Operação</SectionLabel>
+        {queueSummary.ok ? (
+          <QueueSummaryStrip summary={queueSummary.data} />
+        ) : (
+          <UnavailableState
+            message={queueSummary.message}
+            correlationId={queueSummary.correlationId}
+          />
+        )}
       </section>
 
-      <section className="grid items-stretch gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <div className="rounded-card border border-border-subtle bg-surface-1/40 p-6">
-          <MetricsRow metrics={metrics} />
+      {/* 3. Funil e última coleta */}
+      <section className="grid items-stretch gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-card border border-border-subtle bg-surface-1/40 p-5">
+          {metrics.ok ? (
+            <MetricsRow metrics={metrics.data} />
+          ) : (
+            <UnavailableState
+              variant="inline"
+              message={metrics.message}
+              correlationId={metrics.correlationId}
+            />
+          )}
         </div>
-        <SearchActivity data={latestSearch} />
+        {latestSearch.ok ? (
+          <SearchActivity data={latestSearch.data} />
+        ) : (
+          <UnavailableState
+            message={latestSearch.message}
+            correlationId={latestSearch.correlationId}
+          />
+        )}
       </section>
     </div>
   );

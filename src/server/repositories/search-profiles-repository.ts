@@ -9,8 +9,18 @@ import type {
   UpdateSearchProfileInput,
 } from "@/lib/validation/search-profile";
 
+export interface ProfileLocationSummary {
+  city: string;
+  state: string;
+  stateName: string | null;
+  ibgeCode: number | null;
+}
+
 export interface SearchProfileListItem extends SearchProfileRow {
+  /** Rótulos "Cidade — UF" para exibição. */
   cities: string[];
+  /** Localidades estruturadas, para o seletor de municípios. */
+  locations: ProfileLocationSummary[];
   categories: string[];
   category_count: number;
   /** Resumo da execução mais recente (Sprint 2), null se nunca coletou. */
@@ -33,10 +43,23 @@ export function createSearchProfilesRepository(db: Db) {
     async list(): Promise<SearchProfileListItem[]> {
       return db.query<SearchProfileListItem>(
         `select sp.*,
+            -- Rótulo com UF: "Betim — MG". A cidade nunca aparece sozinha,
+            -- para que um erro de estado seja visível de imediato.
             coalesce(
-              array_agg(distinct l.city) filter (where l.city is not null),
+              array_agg(distinct l.city || ' — ' || l.state)
+                filter (where l.city is not null),
               '{}'
             ) as cities,
+            -- Forma estruturada, usada pelo seletor ao editar o perfil.
+            coalesce(
+              (select json_agg(json_build_object(
+                        'city', x.city, 'state', x.state,
+                        'stateName', x.state_name, 'ibgeCode', x.ibge_code)
+                      order by x.city)
+                 from search_profile_locations x
+                where x.search_profile_id = sp.id),
+              '[]'::json
+            ) as locations,
             coalesce(
               (select array_agg(c.label order by c.label)
                  from search_profile_categories c
@@ -110,9 +133,17 @@ export function createSearchProfilesRepository(db: Db) {
 
       for (const loc of input.locations) {
         await db.query(
-          `insert into search_profile_locations (search_profile_id, city, state, country_code)
-           values ($1, $2, $3, $4)`,
-          [profile.id, loc.city, loc.state, loc.countryCode],
+          `insert into search_profile_locations
+             (search_profile_id, city, state, country_code, ibge_code, state_name)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [
+            profile.id,
+            loc.city,
+            loc.state,
+            loc.countryCode,
+            loc.ibgeCode ?? null,
+            loc.stateName ?? null,
+          ],
         );
       }
       for (const cat of input.categories) {
@@ -163,9 +194,17 @@ export function createSearchProfilesRepository(db: Db) {
         );
         for (const loc of input.locations) {
           await db.query(
-            `insert into search_profile_locations (search_profile_id, city, state, country_code)
-             values ($1, $2, $3, $4)`,
-            [input.id, loc.city, loc.state, loc.countryCode],
+            `insert into search_profile_locations
+               (search_profile_id, city, state, country_code, ibge_code, state_name)
+             values ($1, $2, $3, $4, $5, $6)`,
+            [
+              input.id,
+              loc.city,
+              loc.state,
+              loc.countryCode,
+              loc.ibgeCode ?? null,
+              loc.stateName ?? null,
+            ],
           );
         }
       }

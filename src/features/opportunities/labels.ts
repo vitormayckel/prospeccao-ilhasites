@@ -8,6 +8,7 @@ import type {
   ContactRole,
   NextActionStatus,
 } from "@/types/domain";
+import type { AnalysisState } from "@/server/repositories/companies-repository";
 
 export const priorityLabel: Record<Priority, string> = {
   low: "Baixa",
@@ -23,8 +24,27 @@ export const priorityVariant: Record<Priority, BadgeProps["variant"]> = {
   urgent: "danger",
 };
 
+/**
+ * Rótulos finos do estado da análise (§11). `pending_analysis` sozinho é
+ * ambíguo: não distingue "ainda não começou" de "rodando agora" nem de
+ * "travou". A distinção vem de `analysis_state`, derivado por consulta.
+ */
+export const analysisStateLabel: Record<AnalysisState, string> = {
+  awaiting: "Aguardando análise",
+  running: "Em análise",
+  stale: "Análise expirada",
+  retry_pending: "Aguardando nova tentativa",
+};
+
+export const analysisStateTone: Record<AnalysisState, StatusTone> = {
+  awaiting: "neutral",
+  running: "info",
+  stale: "warning",
+  retry_pending: "warning",
+};
+
 export const reviewStatusLabel: Record<ReviewStatus, string> = {
-  pending_analysis: "Em análise",
+  pending_analysis: "Aguardando análise",
   analysis_failed: "Falha na análise",
   pending_review: "Aguardando",
   approved: "Aprovado",

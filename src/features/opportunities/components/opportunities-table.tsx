@@ -18,8 +18,11 @@ import {
   priorityVariant,
   reviewStatusLabel,
   reviewStatusTone,
+  analysisStateLabel,
+  analysisStateTone,
 } from "@/features/opportunities/labels";
-import type { CompanyRow, Priority } from "@/types/domain";
+import type { Priority } from "@/types/domain";
+import type { CompanyListRow } from "@/server/repositories/companies-repository";
 
 /** Só prioridade acionável recebe cor; o resto é texto discreto. */
 function PriorityCell({ priority }: { priority: Priority }) {
@@ -33,7 +36,7 @@ function PriorityCell({ priority }: { priority: Priority }) {
   return <span className="text-text-muted">{priorityLabel[priority]}</span>;
 }
 
-export function OpportunitiesTable({ rows }: { rows: CompanyRow[] }) {
+export function OpportunitiesTable({ rows }: { rows: CompanyListRow[] }) {
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -91,9 +94,19 @@ export function OpportunitiesTable({ rows }: { rows: CompanyRow[] }) {
                   <PriorityCell priority={row.priority} />
                 </TableCell>
                 <TableCell>
+                  {/* O estado fino da análise tem precedência: evita que um
+                      registro travado apareça como "Em análise" para sempre. */}
                   <span className="inline-flex items-center gap-2 whitespace-nowrap text-text-secondary">
-                    <StatusDot tone={reviewStatusTone[row.review_status]} />
-                    {reviewStatusLabel[row.review_status]}
+                    <StatusDot
+                      tone={
+                        row.analysis_state
+                          ? analysisStateTone[row.analysis_state]
+                          : reviewStatusTone[row.review_status]
+                      }
+                    />
+                    {row.analysis_state
+                      ? analysisStateLabel[row.analysis_state]
+                      : reviewStatusLabel[row.review_status]}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">

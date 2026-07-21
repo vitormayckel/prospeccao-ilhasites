@@ -1,10 +1,24 @@
 import { z } from "zod";
 import { uuid, searchProfileStatusEnum } from "@/lib/validation/common";
 
+/**
+ * Localidade do perfil. A UF é obrigatória e validada como sigla de 2 letras
+ * maiúsculas — não existe mais campo de texto livre com default "ES", que era
+ * a causa de cidades de MG serem pesquisadas como ES.
+ *
+ * `ibgeCode` e `stateName` são opcionais para manter compatibilidade com
+ * perfis antigos, que não os possuem. Perfis criados ou editados no formulário
+ * novo sempre os preenchem, porque vêm da seleção estruturada.
+ */
 export const searchProfileLocationSchema = z.object({
   city: z.string().min(1).max(120),
-  state: z.string().min(2).max(2),
+  state: z
+    .string()
+    .length(2, "Selecione a cidade na lista para definir a UF.")
+    .regex(/^[A-Z]{2}$/, "UF deve ser a sigla com 2 letras maiúsculas."),
   countryCode: z.string().length(2).default("BR"),
+  ibgeCode: z.number().int().positive().optional(),
+  stateName: z.string().max(60).optional(),
 });
 
 export const searchProfileCategorySchema = z.object({

@@ -18,7 +18,9 @@ import {
   normalizeName,
   normalizeCity,
   normalizePhoneE164,
-  normalizeDomain,
+  normalizeOwnDomain,
+  normalizeUf,
+  isSocialDomain,
   normalizeUrl,
   normalizeAddress,
 } from "@/server/services/normalization";
@@ -65,13 +67,14 @@ function candidateFrom(
     phoneRaw: result.phone,
     phoneE164: normalizePhoneE164(result.phone),
     websiteUrl: normalizeUrl(result.website),
-    normalizedDomain: normalizeDomain(result.website),
+    // Domínio PRÓPRIO: rede social vira null e nunca serve de identidade.
+    normalizedDomain: normalizeOwnDomain(result.website),
     instagramUrl: normalizeUrl(result.instagram),
     addressLine: result.addressLine,
     normalizedAddress: normalizeAddress(result.addressLine),
     city: result.city,
     normalizedCity: normalizeCity(result.city),
-    state: result.state,
+    state: normalizeUf(result.state),
     postalCode: result.postalCode,
     countryCode: result.countryCode,
     latitude: result.latitude,
@@ -307,8 +310,15 @@ export function createCollectionService(deps: {
     if (!exact && candidate.phoneE164) {
       exact = await collection.findByPhone(candidate.phoneE164);
     }
-    if (!exact && candidate.normalizedDomain) {
-      exact = await collection.findByDomain(candidate.normalizedDomain);
+    // Domínio só identifica quando é próprio (nunca rede social) E o
+    // telefone não conflita — filiais de uma rede compartilham o site.
+    if (!exact && candidate.normalizedDomain && !isSocialDomain(candidate.normalizedDomain)) {
+      const byDomain = await collection.findByDomain(candidate.normalizedDomain);
+      const telefonesConflitam =
+        Boolean(byDomain?.phone_e164) &&
+        Boolean(candidate.phoneE164) &&
+        byDomain!.phone_e164 !== candidate.phoneE164;
+      if (byDomain && !telefonesConflitam) exact = byDomain;
     }
 
     if (exact) {

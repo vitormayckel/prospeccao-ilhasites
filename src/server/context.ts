@@ -16,6 +16,8 @@ import { createAiAnalysesRepository } from "@/server/repositories/ai-analyses-re
 import { createHealthRepository } from "@/server/repositories/health-repository";
 import { createAuditRepository } from "@/server/repositories/audit-repository";
 import { createReportsRepository } from "@/server/repositories/reports-repository";
+import { createJobsRepository } from "@/server/repositories/jobs-repository";
+import { createJobRunner } from "@/server/services/job-runner";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 import { createCollectionService } from "@/server/services/collection-service";
@@ -50,6 +52,7 @@ export async function createServerContext(options?: {
   const healthRepo = createHealthRepository(db);
   const audit = createAuditRepository(db);
   const reports = createReportsRepository(db);
+  const jobs = createJobsRepository(db);
 
   const review = createReviewService({
     companies,
@@ -76,6 +79,12 @@ export async function createServerContext(options?: {
     pipeline: pipelineService,
   });
   const healthService = createHealthService({ health: healthRepo });
+  const jobRunner = createJobRunner({
+    jobs,
+    collection,
+    searchProfiles,
+    analysis: analysisService,
+  });
 
   return {
     db,
@@ -96,6 +105,7 @@ export async function createServerContext(options?: {
       health: healthRepo,
       audit,
       reports,
+      jobs,
     },
     services: {
       review,
@@ -105,6 +115,7 @@ export async function createServerContext(options?: {
       messaging: messagingService,
       contact: contactService,
       health: healthService,
+      jobRunner,
     },
   };
 }

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { History } from "lucide-react";
 import { RunSearchButton } from "@/features/searches/components/run-search-button";
+import { StartProspectButton } from "@/features/searches/components/start-prospect-button";
 import { ProfileStatusToggle } from "@/features/searches/components/profile-status-toggle";
 import { formatDateTime } from "@/lib/format";
 import { createServerContext } from "@/server/context";
@@ -78,8 +79,14 @@ export default async function SearchProfileDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <ProfileStatusToggle id={profile.id} status={profile.status} />
+          {/* "Testar" continua sendo a coleta síncrona sem persistir — é
+              diagnóstico do perfil. Iniciar a prospecção de verdade cria o
+              job persistente. */}
           <RunSearchButton profileId={profile.id} mode="test" />
-          <RunSearchButton profileId={profile.id} mode="run" />
+          <StartProspectButton
+            profileId={profile.id}
+            targetQualified={profile.daily_limit}
+          />
         </div>
       </div>
 

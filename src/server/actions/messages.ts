@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerContext } from "@/server/context";
+import { toActionError } from "@/lib/errors";
 import type { ActionResult } from "@/server/actions/opportunities";
 import { messageKindEnum } from "@/lib/validation/common";
 import { z } from "zod";
@@ -41,7 +42,7 @@ export async function openWhatsappMessageAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao registrar.",
+      error: toActionError("action.registerMessage", error, "Erro ao registrar."),
     };
   }
 }
@@ -61,7 +62,7 @@ export async function confirmMessageSentAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao confirmar.",
+      error: toActionError("action.confirmMessage", error, "Erro ao confirmar."),
     };
   }
 }
@@ -79,7 +80,7 @@ export async function markMessageNotSentAction(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Erro ao atualizar.",
+      error: toActionError("action.updateMessage", error, "Erro ao atualizar."),
     };
   }
 }

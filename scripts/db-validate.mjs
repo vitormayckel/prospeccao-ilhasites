@@ -96,6 +96,28 @@ for (const [label, sql, expected] of checks) {
   console.log("✓ " + label);
 }
 
+// 4b) RLS em TODAS as tabelas (Blueprint RNF-11 / §18)
+// Esta verificação existe porque backfill_uf_audit e unmerge_audit passaram a
+// existir em produção sem RLS: eram criadas em runtime pelos scripts de
+// backfill, fora do schema versionado. Toda tabela nova cai aqui agora.
+const semRls = await db.query(
+  `select c.relname from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
+    order by 1`,
+);
+if (semRls.rows.length > 0) {
+  fail(
+    `tabelas sem row level security: ${semRls.rows.map((r) => r.relname).join(", ")}`,
+  );
+}
+const comRls = await db.query(
+  `select count(*)::int as c from pg_class c
+     join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity`,
+);
+console.log(`✓ RLS habilitado nas ${comRls.rows[0].c} tabelas do schema`);
+
 // 5) Resumo do funil
 const funnel = await db.query(
   `select pipeline_stage, count(*)::int as c from companies group by pipeline_stage order by 1;`,

@@ -63,6 +63,89 @@ export function normalizeDomain(url: string | null | undefined): string | null {
 }
 
 /** Normaliza URL para armazenamento: garante protocolo, remove barra final. */
+/**
+ * Domínios que NUNCA identificam uma empresa.
+ *
+ * O Google devolve o perfil da rede social em `websiteUri` quando o negócio
+ * não tem site próprio. Tratar isso como domínio fundia empresas distintas:
+ * observado em produção, 14 negócios diferentes de Vitória, Vila Velha,
+ * Cariacica e Serra colapsaram em um único registro porque todos tinham
+ * "instagram.com" como domínio. São leads reais perdidos.
+ *
+ * Um perfil social é evidência de contato, não de identidade.
+ */
+const SOCIAL_DOMAINS = new Set([
+  "instagram.com",
+  "facebook.com",
+  "fb.com",
+  "m.facebook.com",
+  "linktr.ee",
+  "linktree.com",
+  "wa.me",
+  "api.whatsapp.com",
+  "web.whatsapp.com",
+  "whatsapp.com",
+  "tiktok.com",
+  "youtube.com",
+  "youtu.be",
+  "twitter.com",
+  "x.com",
+  "linkedin.com",
+  "beacons.ai",
+  "bio.link",
+  "bit.ly",
+  "google.com",
+  "sites.google.com",
+  "business.site",
+  "negocio.site",
+]);
+
+/** O domínio pertence a uma rede social / encurtador (nunca é identidade)? */
+export function isSocialDomain(domain: string | null | undefined): boolean {
+  if (!domain) return false;
+  const d = domain.toLowerCase().replace(/^www\./, "");
+  if (SOCIAL_DOMAINS.has(d)) return true;
+  // Subdomínios de plataformas (ex.: algumaloja.business.site)
+  return [...SOCIAL_DOMAINS].some((s) => d.endsWith(`.${s}`));
+}
+
+/**
+ * Domínio PRÓPRIO da empresa — a única forma aceitável de usar domínio como
+ * chave de deduplicação. Devolve null para redes sociais e encurtadores.
+ *
+ * `normalizeDomain` continua existindo para exibição/diagnóstico; para
+ * identidade, use sempre esta.
+ */
+export function normalizeOwnDomain(
+  url: string | null | undefined,
+): string | null {
+  const domain = normalizeDomain(url);
+  return domain && !isSocialDomain(domain) ? domain : null;
+}
+
+/**
+ * UF sempre em sigla de 2 letras. O provedor pode devolver o nome por
+ * extenso ("Espírito Santo"), que quebraria a dedup por cidade+UF.
+ */
+const UF_BY_NAME: Record<string, string> = {
+  acre: "AC", alagoas: "AL", amapa: "AP", amazonas: "AM", bahia: "BA",
+  ceara: "CE", "distrito federal": "DF", "espirito santo": "ES", goias: "GO",
+  maranhao: "MA", "mato grosso": "MT", "mato grosso do sul": "MS",
+  "minas gerais": "MG", para: "PA", paraiba: "PB", parana: "PR",
+  pernambuco: "PE", piaui: "PI", "rio de janeiro": "RJ",
+  "rio grande do norte": "RN", "rio grande do sul": "RS", rondonia: "RO",
+  roraima: "RR", "santa catarina": "SC", "sao paulo": "SP", sergipe: "SE",
+  tocantins: "TO",
+};
+
+export function normalizeUf(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+  const key = stripDiacritics(raw).toLowerCase().replace(/\s+/g, " ");
+  return UF_BY_NAME[key] ?? raw.toUpperCase().slice(0, 2);
+}
+
 export function normalizeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim();

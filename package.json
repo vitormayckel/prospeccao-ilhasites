@@ -16,7 +16,13 @@
     "analysis:validate": "node scripts/generate-seed.mjs && node scripts/analysis-validate.mjs",
     "messaging:validate": "node scripts/generate-seed.mjs && node scripts/messaging-validate.mjs",
     "pipeline:validate": "node scripts/generate-seed.mjs && node scripts/pipeline-validate.mjs",
-    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs && node scripts/pipeline-validate.mjs"
+    "jobs:validate": "node scripts/generate-seed.mjs && node scripts/jobs-validate.mjs",
+    "municipios:generate": "node scripts/generate-municipios.mjs",
+    "municipios:validate": "node scripts/municipios-validate.mjs",
+    "backfill:uf": "node scripts/backfill-uf.mjs",
+    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs && node scripts/pipeline-validate.mjs && node scripts/jobs-validate.mjs && node scripts/municipios-validate.mjs && node scripts/dedup-validate.mjs",
+    "dedup:validate": "node scripts/dedup-validate.mjs",
+    "backfill:unmerge": "node scripts/backfill-unmerge-social.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
@@ -28,6 +34,7 @@
     "@radix-ui/react-tooltip": "^1.2.12",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
+    "@vercel/functions": "^3.7.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "geist": "^1.3.1",

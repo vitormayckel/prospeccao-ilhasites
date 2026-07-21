@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeUf } from "@/server/services/normalization";
 import type {
   PlacesProvider,
   ProviderResult,
@@ -74,6 +75,21 @@ function componentByType(
   return match?.longText ?? match?.shortText ?? null;
 }
 
+/**
+ * Versão que prefere a forma CURTA do componente.
+ *
+ * Necessária para a UF: `longText` devolve "Espírito Santo" e o sistema
+ * inteiro trabalha com a sigla de 2 letras ("ES"). Sem isto, cada coleta
+ * regravava o nome por extenso e quebrava a deduplicação por cidade+UF.
+ */
+function componentShortByType(
+  components: GoogleAddressComponent[] | undefined,
+  type: string,
+): string | null {
+  const match = components?.find((c) => c.types?.includes(type));
+  return match?.shortText ?? match?.longText ?? null;
+}
+
 function mapPlace(
   place: GooglePlace,
   query: ProviderSearchQuery,
@@ -83,8 +99,11 @@ function mapPlace(
     componentByType(components, "locality") ??
     componentByType(components, "administrative_area_level_2") ??
     query.city;
-  const state =
-    componentByType(components, "administrative_area_level_1") ?? query.state;
+  // Sempre a sigla: "ES", nunca "Espírito Santo".
+  const state = normalizeUf(
+    componentShortByType(components, "administrative_area_level_1") ??
+      query.state,
+  );
 
   return {
     externalId: place.id ?? null,
@@ -118,7 +137,10 @@ export function createGooglePlacesProvider(apiKey: string): PlacesProvider {
 
       try {
         const body: Record<string, unknown> = {
-          textQuery: `${query.category} em ${query.city}, ${query.state}`,
+          // Cidade, UF e país explícitos. Sem a UF, "Betim" podia cair no
+          // estado errado; sem o país, o Google pode resolver homônimos fora
+          // do Brasil. Ambos são obrigatórios na consulta.
+          textQuery: `${query.category} em ${query.city}, ${query.state}, Brasil`,
           regionCode: query.countryCode || "BR",
           languageCode: "pt-BR",
           maxResultCount: Math.min(query.limit, MAX_PAGE_SIZE),

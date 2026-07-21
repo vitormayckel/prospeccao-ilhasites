@@ -11,10 +11,32 @@ import {
   snapshotRefs,
 } from "@/server/services/analysis-snapshot";
 import { prospectAnalysisSchema } from "@/lib/validation/analysis";
+import { logAndSanitize, logInfo, newCorrelationId } from "@/lib/errors";
 import type { ProspectAnalysis } from "@/types/domain";
 
 // Máximo de tentativas: 1 + 2 retries (Blueprint §9.4/§9.6/8).
 const MAX_ATTEMPTS = 3;
+
+// ---------------------------------------------------------------------
+// Limites compatíveis com o menor teto de função da Vercel (Hobby, 10s).
+//
+// Paliativo consciente da FASE 1: sem worker persistente, o lote precisa
+// caber dentro do request. Antes, `analyzePending(20)` rodava até ~30min no
+// pior caso, era morto no meio pela plataforma e deixava análises presas em
+// `running`. A solução definitiva é a fila persistente da FASE 2.
+// ---------------------------------------------------------------------
+
+/** Empresas por invocação. Baixo de propósito. */
+const DEFAULT_BATCH_SIZE = 3;
+
+/** Orçamento total do lote, com margem antes do corte da plataforma. */
+const BATCH_DEADLINE_MS = 8_000;
+
+/** Reserva mínima para tentar mais uma empresa sem estourar o orçamento. */
+const PER_COMPANY_RESERVE_MS = 2_500;
+
+/** Depois disto, uma análise `running` é considerada expirada (§8/§11). */
+const STALE_ANALYSIS_MINUTES = 10;
 
 export interface AnalyzeResult {
   ok: boolean;
@@ -27,6 +49,12 @@ export interface AnalyzeBatchResult {
   analyzed: number;
   failed: number;
   costEstimate: number;
+  /** Análises expiradas recuperadas antes do lote. */
+  recovered: number;
+  /** Empresas não processadas por falta de orçamento de tempo. */
+  remaining: number;
+  /** true quando o lote parou pelo deadline, não por acabar a fila. */
+  stoppedByDeadline: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -150,20 +178,88 @@ export function createAnalysisService(deps: {
     return { ok: false, companyId, error: lastError };
   }
 
-  /** Analisa em lote as empresas pendentes (RF-07). */
-  async function analyzePending(limit = 20): Promise<AnalyzeBatchResult> {
+  /**
+   * Analisa em lote as empresas pendentes (RF-07), respeitando um orçamento
+   * de tempo. Para antes do corte da plataforma em vez de ser morto no meio,
+   * o que deixaria linhas presas em `running`.
+   *
+   * Idempotente por invocação: o que não couber permanece em
+   * `pending_analysis` e volta no próximo acionamento.
+   */
+  async function analyzePending(
+    limit = DEFAULT_BATCH_SIZE,
+  ): Promise<AnalyzeBatchResult> {
+    const startedAt = Date.now();
+    const correlationId = newCorrelationId();
+
+    // Antes de qualquer coisa: devolve à fila o que ficou preso em execuções
+    // interrompidas. Sem isto a fila trava permanentemente.
+    let recovered = 0;
+    try {
+      recovered = await aiAnalyses.recoverStaleRunning(STALE_ANALYSIS_MINUTES);
+      if (recovered > 0) {
+        logInfo("analysis.recoveredStale", { correlationId, recovered });
+      }
+    } catch (error) {
+      // Recuperação é oportunista: falhar aqui não impede o lote.
+      logAndSanitize("analysis.recoverStale", error, { correlationId });
+    }
+
     const pending = await aiAnalyses.listCompaniesPendingAnalysis(limit);
+    logInfo("analysis.batchStart", {
+      correlationId,
+      pending: pending.length,
+      limit,
+    });
+
     let analyzed = 0;
     let failed = 0;
+    let processed = 0;
+    let stoppedByDeadline = false;
+
     for (const company of pending) {
-      const result = await analyzeCompany(company.id);
-      if (result.ok) analyzed++;
-      else failed++;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed > BATCH_DEADLINE_MS - PER_COMPANY_RESERVE_MS) {
+        stoppedByDeadline = true;
+        break;
+      }
+      processed++;
+      // Uma empresa com erro não pode abortar o lote inteiro.
+      try {
+        const result = await analyzeCompany(company.id);
+        if (result.ok) analyzed++;
+        else failed++;
+      } catch (error) {
+        failed++;
+        logAndSanitize("analysis.company", error, {
+          correlationId,
+          companyId: company.id,
+        });
+      }
     }
-    return { analyzed, failed, costEstimate: 0 };
+
+    const result: AnalyzeBatchResult = {
+      analyzed,
+      failed,
+      costEstimate: 0,
+      recovered,
+      remaining: pending.length - processed,
+      stoppedByDeadline,
+    };
+    logInfo("analysis.batchEnd", {
+      correlationId,
+      ...result,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
   }
 
-  return { analyzeCompany, analyzePending };
+  /** Recuperação administrativa de análises expiradas (§8/§11). */
+  async function recoverStaleAnalyses(): Promise<number> {
+    return aiAnalyses.recoverStaleRunning(STALE_ANALYSIS_MINUTES);
+  }
+
+  return { analyzeCompany, analyzePending, recoverStaleAnalyses };
 }
 
 export type AnalysisService = ReturnType<typeof createAnalysisService>;

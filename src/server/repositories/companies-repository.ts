@@ -19,6 +19,19 @@ import type {
 } from "@/types/domain";
 import type { OpportunityFilters } from "@/lib/validation/company";
 
+/**
+ * Estado da análise, derivado por consulta (não persistido):
+ *  awaiting       — importada, ainda não entrou na fila da IA
+ *  running        — análise em andamento agora
+ *  stale          — análise presa há mais de 10 min (tick morto)
+ *  retry_pending  — última tentativa falhou; será reprocessada
+ */
+export type AnalysisState = "awaiting" | "running" | "stale" | "retry_pending";
+
+export interface CompanyListRow extends CompanyRow {
+  analysis_state: AnalysisState | null;
+}
+
 export interface Paginated<T> {
   rows: T[];
   total: number;
@@ -61,7 +74,7 @@ export function createCompaniesRepository(db: Db) {
   return {
     findById,
 
-    async list(filters: OpportunityFilters): Promise<Paginated<CompanyRow>> {
+    async list(filters: OpportunityFilters): Promise<Paginated<CompanyListRow>> {
       const where: string[] = ["c.deleted_at is null"];
       const params: unknown[] = [];
 
@@ -96,8 +109,29 @@ export function createCompaniesRepository(db: Db) {
       const total = totalRows[0]?.total ?? 0;
 
       const offset = (filters.page - 1) * filters.pageSize;
-      const rows = await db.query<CompanyRow>(
-        `select c.* from companies c
+      // `analysis_state` distingue "aguardando análise" de "em análise" e
+      // detecta análise expirada — sem isto um registro cujo tick morreu
+      // ficaria "Em análise" para sempre (§11).
+      const rows = await db.query<CompanyListRow>(
+        `select c.*,
+            case
+              when c.review_status <> 'pending_analysis' then null
+              when a.id is null then 'awaiting'
+              when a.status = 'running'
+                   and coalesce(a.started_at, a.created_at)
+                       < now() - interval '10 minutes' then 'stale'
+              when a.status = 'running' then 'running'
+              when a.status = 'failed' then 'retry_pending'
+              else 'awaiting'
+            end as analysis_state
+         from companies c
+         left join lateral (
+           select id, status, started_at, created_at
+             from ai_analyses
+            where company_id = c.id
+            order by created_at desc
+            limit 1
+         ) a on true
          where ${whereSql}
          order by ${orderSql}
          limit ${filters.pageSize} offset ${offset}`,

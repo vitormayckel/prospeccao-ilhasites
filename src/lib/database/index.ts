@@ -27,7 +27,17 @@ async function create(): Promise<Db> {
 
 export function getDb(): Promise<Db> {
   if (!globalForDb.__ilhaDbPromise) {
-    globalForDb.__ilhaDbPromise = create();
+    // Uma promise REJEITADA cacheada envenena a instância para sempre: todo
+    // request seguinte reusaria a mesma rejeição, mesmo com o banco já
+    // saudável. Limpar o cache na falha permite recuperação automática no
+    // próximo request, sem precisar reciclar a lambda.
+    const promise = create();
+    globalForDb.__ilhaDbPromise = promise;
+    promise.catch(() => {
+      if (globalForDb.__ilhaDbPromise === promise) {
+        globalForDb.__ilhaDbPromise = undefined;
+      }
+    });
   }
   return globalForDb.__ilhaDbPromise;
 }
