@@ -80,6 +80,8 @@ export async function createServerContext(options?: {
   });
   const healthService = createHealthService({ health: healthRepo });
   const jobRunner = createJobRunner({
+    // `db` é o que permite ao runner abrir transações na etapa DEDUP.
+    db,
     jobs,
     collection,
     searchProfiles,

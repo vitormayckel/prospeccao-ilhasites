@@ -66,13 +66,15 @@ export const COMMERCIAL_PRIORITY = ["A", "B", "C", "D"] as const;
 export type CommercialPriority = (typeof COMMERCIAL_PRIORITY)[number];
 
 /** Mapa puro classe→prioridade. Única fonte de verdade da derivação. */
-export const WEBSITE_CLASS_TO_PRIORITY: Record<WebsiteClass, CommercialPriority> =
-  {
-    none: "A",
-    very_poor: "B",
-    reasonable: "C",
-    professional: "D",
-  };
+export const WEBSITE_CLASS_TO_PRIORITY: Record<
+  WebsiteClass,
+  CommercialPriority
+> = {
+  none: "A",
+  very_poor: "B",
+  reasonable: "C",
+  professional: "D",
+};
 
 /** Origem do cálculo do commercial_score (auditoria). */
 export const COMMERCIAL_SCORED_BY = ["prefilter", "ai"] as const;
@@ -507,6 +509,10 @@ export type JobRow = JobQueueRow & {
   error_detail: string | null;
   cursor_combo: number;
   cursor_page: number;
+  /** Token opaco da próxima página do provedor (null = primeira página). */
+  cursor_page_token: string | null;
+  /** Quando o token foi emitido — o provedor exige um instante de carência. */
+  cursor_page_token_at: string | null;
   current_city: string | null;
   current_state: string | null;
   current_term: string | null;

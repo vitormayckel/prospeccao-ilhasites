@@ -146,6 +146,10 @@ export function createGooglePlacesProvider(apiKey: string): PlacesProvider {
           maxResultCount: Math.min(query.limit, MAX_PAGE_SIZE),
         };
         if (query.minRating != null) body.minRating = query.minRating;
+        // Continuação de uma busca anterior. A API exige que os demais
+        // parâmetros sejam IDÊNTICOS aos da chamada que gerou o token —
+        // por isso o token é aplicado ao mesmo corpo, sem alterar a consulta.
+        if (query.pageToken) body.pageToken = query.pageToken;
 
         const response = await fetch(TEXT_SEARCH_URL, {
           method: "POST",
@@ -168,7 +172,13 @@ export function createGooglePlacesProvider(apiKey: string): PlacesProvider {
 
         const data = (await response.json()) as GoogleTextSearchResponse;
         const results = (data.places ?? []).map((p) => mapPlace(p, query));
-        return { results, estimatedCost: costPerRequest() };
+        return {
+          results,
+          estimatedCost: costPerRequest(),
+          // Repassado ao pipeline, que decide se vale pedir a próxima página
+          // (orçamento de chamadas, meta já atingida, teto de páginas).
+          nextPageToken: data.nextPageToken ?? null,
+        };
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           throw new Error("Google Places excedeu o tempo limite (15s).");

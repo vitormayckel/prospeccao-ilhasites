@@ -5,43 +5,112 @@ import type { NormalizedCandidate } from "@/server/repositories/collection-repos
 /** Tempo de posse do job por um worker. Expirado, outro tick pode retomar. */
 export const LOCK_SECONDS = 120;
 
+export interface CreateJobInput {
+  jobType: string;
+  searchProfileId: string;
+  idempotencyKey: string;
+  targetQualified: number;
+  maxProviderCalls: number;
+  maxAiCalls: number;
+  deadlineAt: string | null;
+  payload: Record<string, unknown>;
+}
+
+/** 23505 — violação de unicidade, em qualquer um dos dois drivers. */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (code === "23505") return true;
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("duplicate key value") ||
+    message.includes("violates unique constraint")
+  );
+}
+
 export function createJobsRepository(db: Db) {
-  return {
-    async create(input: {
-      jobType: string;
-      searchProfileId: string;
-      idempotencyKey: string;
-      targetQualified: number;
-      maxProviderCalls: number;
-      maxAiCalls: number;
-      deadlineAt: string | null;
-      payload: Record<string, unknown>;
-    }): Promise<JobRow> {
-      const rows = await db.query<JobRow>(
-        `insert into job_queue
+  // Funções locais (não métodos): os repositories também são consumidos por
+  // desestruturação, e um `this` implícito quebraria nesses casos.
+  async function create(input: CreateJobInput): Promise<JobRow> {
+    const rows = await db.query<JobRow>(
+      `insert into job_queue
            (job_type, search_profile_id, idempotency_key, status, phase,
             target_qualified, max_provider_calls, max_ai_calls, deadline_at, payload)
          values ($1,$2,$3,'queued','SEARCH',$4,$5,$6,$7,$8)
          on conflict (idempotency_key) do nothing
          returning *`,
-        [
-          input.jobType,
-          input.searchProfileId,
-          input.idempotencyKey,
-          input.targetQualified,
-          input.maxProviderCalls,
-          input.maxAiCalls,
-          input.deadlineAt,
-          input.payload,
-        ],
-      );
-      if (rows[0]) return rows[0];
-      // Conflito de idempotência: outra requisição já criou este job.
-      const existing = await db.query<JobRow>(
-        "select * from job_queue where idempotency_key = $1",
-        [input.idempotencyKey],
-      );
-      return existing[0]!;
+      [
+        input.jobType,
+        input.searchProfileId,
+        input.idempotencyKey,
+        input.targetQualified,
+        input.maxProviderCalls,
+        input.maxAiCalls,
+        input.deadlineAt,
+        input.payload,
+      ],
+    );
+    if (rows[0]) return rows[0];
+    // Conflito de idempotência: outra requisição já criou este job.
+    const existing = await db.query<JobRow>(
+      "select * from job_queue where idempotency_key = $1",
+      [input.idempotencyKey],
+    );
+    return existing[0]!;
+  }
+
+  /**
+   * Job ainda em andamento para um perfil. É a defesa contra execução
+   * duplicada que a chave de idempotência (por minuto) não cobre: clicar
+   * "Iniciar" de novo dez minutos depois criaria uma segunda execução
+   * concorrente sobre o mesmo perfil, gastando Google e IA em dobro.
+   */
+  async function findActiveByProfile(
+    profileId: string,
+  ): Promise<JobRow | null> {
+    const rows = await db.query<JobRow>(
+      `select * from job_queue
+        where job_type = 'prospect_pipeline'
+          and search_profile_id = $1
+          and status in ('queued','running')
+        order by created_at desc limit 1`,
+      [profileId],
+    );
+    return rows[0] ?? null;
+  }
+
+  return {
+    create,
+    findActiveByProfile,
+
+    /**
+     * Cria o job garantindo UMA execução ativa por perfil.
+     *
+     * `uq_job_queue_active_profile` (migration 0012) é quem realmente impede a
+     * corrida: a checagem prévia em `findActiveByProfile` é TOCTOU e duas
+     * requisições simultâneas passam as duas. Aqui a segunda recebe 23505 do
+     * banco e é convertida na execução que já existe — o chamador nunca vê
+     * erro técnico, e nenhuma execução duplicada é criada.
+     */
+    async createUnique(
+      input: CreateJobInput,
+    ): Promise<{ job: JobRow; alreadyRunning: boolean }> {
+      const active = await findActiveByProfile(input.searchProfileId);
+      if (active) return { job: active, alreadyRunning: true };
+
+      try {
+        return { job: await create(input), alreadyRunning: false };
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        // Corrida perdida entre a checagem acima e o INSERT: o índice único
+        // barrou a segunda execução. Devolve a que venceu.
+        const winner = await findActiveByProfile(input.searchProfileId);
+        // Sem job ativo após um 23505 significa que a violação veio de outra
+        // restrição — repassa, senão o erro real ficaria escondido.
+        if (!winner) throw error;
+        return { job: winner, alreadyRunning: true };
+      }
     },
 
     /**
@@ -129,18 +198,47 @@ export function createJobsRepository(db: Db) {
       input: {
         combo: number;
         page: number;
+        /**
+         * Token da próxima página. `null` limpa a paginação; OMITIR mantém o
+         * token e o carimbo intactos.
+         *
+         * A distinção importa: a gravação de posição feita no início do passo
+         * (só para o painel mostrar onde a busca está) não pode re-carimbar o
+         * `cursor_page_token_at`, senão a carência do token seria recontada do
+         * zero a cada tick e a página seguinte esperaria sempre o tempo cheio.
+         */
+        pageToken?: string | null;
         city: string | null;
         state: string | null;
         term: string | null;
       },
     ): Promise<void> {
+      const touchToken = "pageToken" in input;
+      const token = input.pageToken ?? null;
       await db.query(
         `update job_queue set
            cursor_combo = $2, cursor_page = $3,
-           current_city = $4, current_state = $5, current_term = $6,
+           cursor_page_token = case when $4 then $5::text else cursor_page_token end,
+           cursor_page_token_at = case
+             when not $4 then cursor_page_token_at
+             when $5::text is null then null
+             -- Carimba só quando um token NOVO entra: é daqui que sai a
+             -- carência antes de pedir a próxima página.
+             else now()
+           end,
+           current_city = $6, current_state = $7, current_term = $8,
            updated_at = now()
          where id = $1`,
-        [jobId, input.combo, input.page, input.city, input.state, input.term],
+        [
+          jobId,
+          input.combo,
+          input.page,
+          touchToken,
+          token,
+          input.city,
+          input.state,
+          input.term,
+        ],
       );
     },
 
@@ -241,7 +339,11 @@ export function createJobsRepository(db: Db) {
     /** Agenda nova tentativa com backoff limitado por max_attempts. */
     async scheduleRetry(
       jobId: string,
-      input: { delaySeconds: number; errorSummary: string; errorDetail: string },
+      input: {
+        delaySeconds: number;
+        errorSummary: string;
+        errorDetail: string;
+      },
     ): Promise<{ exhausted: boolean }> {
       const rows = await db.query<{ exhausted: boolean }>(
         // Os literais do CASE precisam de cast explícito: sem ele a expressão
@@ -289,24 +391,6 @@ export function createJobsRepository(db: Db) {
          order by created_at desc
          limit ${Number(limit)}`,
       );
-    },
-
-    /**
-     * Job ainda em andamento para um perfil. É a defesa contra execução
-     * duplicada que a chave de idempotência (por minuto) não cobre: clicar
-     * "Iniciar" de novo dez minutos depois criaria uma segunda execução
-     * concorrente sobre o mesmo perfil, gastando Google e IA em dobro.
-     */
-    async findActiveByProfile(profileId: string): Promise<JobRow | null> {
-      const rows = await db.query<JobRow>(
-        `select * from job_queue
-          where job_type = 'prospect_pipeline'
-            and search_profile_id = $1
-            and status in ('queued','running')
-          order by created_at desc limit 1`,
-        [profileId],
-      );
-      return rows[0] ?? null;
     },
 
     async countActive(): Promise<number> {
@@ -397,7 +481,10 @@ export function createJobsRepository(db: Db) {
       );
     },
 
-    async countCandidatesByStage(jobId: string, stage: string): Promise<number> {
+    async countCandidatesByStage(
+      jobId: string,
+      stage: string,
+    ): Promise<number> {
       const rows = await db.query<{ c: number }>(
         "select count(*)::int as c from job_candidates where job_id = $1 and stage = $2",
         [jobId, stage],
@@ -419,13 +506,22 @@ export function createJobsRepository(db: Db) {
 
     async resolveCandidate(
       candidateId: string,
-      input: { stage: string; companyId?: string | null; reason?: string | null },
+      input: {
+        stage: string;
+        companyId?: string | null;
+        reason?: string | null;
+      },
     ): Promise<void> {
       await db.query(
         `update job_candidates set
            stage = $2, company_id = $3, reason = $4, updated_at = now()
          where id = $1`,
-        [candidateId, input.stage, input.companyId ?? null, input.reason ?? null],
+        [
+          candidateId,
+          input.stage,
+          input.companyId ?? null,
+          input.reason ?? null,
+        ],
       );
     },
 
@@ -480,9 +576,7 @@ export function createJobsRepository(db: Db) {
          where jc.job_id = $1 and jc.stage = 'new' and c.deleted_at is null`,
         [jobId, minScore],
       );
-      return (
-        rows[0] ?? { qualified: 0, disqualified: 0, pending: 0 }
-      );
+      return rows[0] ?? { qualified: 0, disqualified: 0, pending: 0 };
     },
 
     /**

@@ -51,11 +51,12 @@ const FINISH_REASON: Record<string, string> = {
     "Todas as combinações de cidade e categoria do perfil foram pesquisadas.",
   limite_chamadas_provedor:
     "Limite de chamadas ao Google Places atingido (proteção de custo).",
-  limite_chamadas_ia:
-    "Limite de análises de IA atingido (proteção de custo).",
+  limite_chamadas_ia: "Limite de análises de IA atingido (proteção de custo).",
   duracao_maxima_atingida: "Duração máxima da execução atingida.",
   max_attempts_reached:
     "A execução falhou repetidamente e foi encerrada após o limite de tentativas.",
+  erro_permanente:
+    "A execução parou em um erro que não se resolve sozinho. Repetir daria o mesmo resultado, então nenhuma nova tentativa foi feita.",
 };
 
 function Metric({
@@ -133,7 +134,7 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
     job.finish_reason !== "meta_atingida";
 
   return (
-    <section className="rounded-card border border-border-subtle bg-surface-1/60 p-5">
+    <section className="bg-surface-1/60 rounded-card border border-border-subtle p-5">
       {/* Cabeçalho: identificação e status */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -148,9 +149,12 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
           </div>
           <p className="mt-1 text-micro text-text-muted">
             {job.started_at
-              ? `Iniciada em ${new Date(job.started_at).toLocaleString("pt-BR", {
-                  timeZone: "America/Sao_Paulo",
-                })}`
+              ? `Iniciada em ${new Date(job.started_at).toLocaleString(
+                  "pt-BR",
+                  {
+                    timeZone: "America/Sao_Paulo",
+                  },
+                )}`
               : "Aguardando início"}
           </p>
         </div>
@@ -235,7 +239,7 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
             </div>
             <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-3">
               <div
-                className="h-full rounded-full bg-text-secondary/50 transition-[width] duration-500"
+                className="bg-text-secondary/50 h-full rounded-full transition-[width] duration-500"
                 style={{ width: `${analyzedPct}%` }}
               />
             </div>
@@ -250,7 +254,11 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
         <Metric label="Já existentes" value={job.count_existing} tone="muted" />
         <Metric label="Duplicadas" value={job.count_duplicate} tone="muted" />
         <Metric label="Analisadas" value={job.count_analyzed} />
-        <Metric label="Qualificadas" value={job.count_qualified} tone="accent" />
+        <Metric
+          label="Qualificadas"
+          value={job.count_qualified}
+          tone="accent"
+        />
         {job.count_disqualified > 0 ? (
           <Metric label="Desclassificadas" value={job.count_disqualified} />
         ) : null}
@@ -258,7 +266,11 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
           <Metric label="Inválidas" value={job.count_invalid} tone="muted" />
         ) : null}
         {job.count_suppressed > 0 ? (
-          <Metric label="Bloqueadas" value={job.count_suppressed} tone="muted" />
+          <Metric
+            label="Bloqueadas"
+            value={job.count_suppressed}
+            tone="muted"
+          />
         ) : null}
         {job.count_failed > 0 ? (
           <Metric label="Falhas" value={job.count_failed} tone="danger" />
@@ -270,7 +282,7 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
 
       {/* Conclusão parcial: explicar, nunca deixar "55 de 100" sem contexto */}
       {partial && job.finish_reason ? (
-        <div className="mt-4 rounded-card border border-border-subtle bg-surface-2/60 p-3.5">
+        <div className="bg-surface-2/60 mt-4 rounded-card border border-border-subtle p-3.5">
           <p className="text-meta text-text-primary">
             Entregou {job.count_qualified} de {job.target_qualified}{" "}
             oportunidades qualificadas.
@@ -283,7 +295,7 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
 
       {/* Erro sanitizado — nunca stack trace nem SQL */}
       {job.status === "failed" && job.last_error ? (
-        <div className="mt-4 rounded-card border border-danger/25 bg-danger/5 p-3.5">
+        <div className="border-danger/25 bg-danger/5 mt-4 rounded-card border p-3.5">
           <p className="text-meta text-text-primary">{job.last_error}</p>
         </div>
       ) : null}

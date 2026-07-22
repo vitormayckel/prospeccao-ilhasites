@@ -9,6 +9,21 @@ export interface Db {
     text: string,
     params?: unknown[],
   ): Promise<T[]>;
+
+  /**
+   * Executa `fn` dentro de UMA transação. Commit ao resolver, ROLLBACK ao
+   * lançar — a exceção é repassada ao chamador.
+   *
+   * O `Db` recebido em `fn` é a conexão da transação: toda escrita precisa
+   * passar por ele. Usar o `Db` externo dentro do callback escreveria fora da
+   * transação e não sofreria rollback.
+   *
+   * Existe porque a etapa DEDUP grava empresa, fonte e evidência em sequência:
+   * sem atomicidade, uma falha no meio (por exemplo, colisão de identidade ao
+   * inserir a fonte) deixava a empresa gravada sem proveniência — órfã,
+   * invisível para a dedup e fora dos contadores.
+   */
+  transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T>;
 }
 
 /**

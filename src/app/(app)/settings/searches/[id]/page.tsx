@@ -50,6 +50,9 @@ export default async function SearchProfileDetailPage({
   const { profile, locations, categories } = detail;
   const runs = await repositories.collection.listRunsByProfile(profile.id, 10);
   const activeCategories = categories.filter((c) => c.active);
+  // Resolvido no servidor para o botão já nascer desabilitado quando há
+  // execução em andamento — sem piscar "Iniciar prospecção".
+  const activeJob = await repositories.jobs.findActiveByProfile(profile.id);
 
   return (
     <div className="space-y-5">
@@ -86,6 +89,7 @@ export default async function SearchProfileDetailPage({
           <StartProspectButton
             profileId={profile.id}
             targetQualified={profile.daily_limit}
+            activeJobId={activeJob?.id ?? null}
           />
         </div>
       </div>

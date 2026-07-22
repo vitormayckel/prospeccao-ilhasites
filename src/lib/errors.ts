@@ -17,6 +17,27 @@ export const RETRYABLE_MESSAGE =
 export const READ_FAILURE_MESSAGE =
   "Não foi possível carregar estes dados agora. Tente novamente em instantes.";
 
+// ---------------------------------------------------------------------
+// Mensagens de ESCRITA.
+//
+// Antes, toda falha não-transitória caía em READ_FAILURE_MESSAGE — inclusive
+// violação de constraint ao gravar. O operador via "não foi possível carregar
+// estes dados" para um erro de gravação, o que não descreve o que aconteceu
+// nem sugere a ação correta.
+// ---------------------------------------------------------------------
+
+/** Falha ao persistir uma empresa/candidato da coleta. */
+export const WRITE_FAILURE_MESSAGE =
+  "Falha ao salvar os dados desta empresa. Nenhuma alteração parcial foi mantida.";
+
+/** Colisão de identidade forte (mesmo Place ID, telefone ou domínio). */
+export const IDENTITY_CONFLICT_MESSAGE =
+  "Conflito de identidade detectado: este registro já existe vinculado a outra empresa.";
+
+/** Encerramento por erro que não se resolve sozinho — retry não ajuda. */
+export const PERMANENT_FAILURE_MESSAGE =
+  "Execução interrompida por erro permanente. Nenhuma nova tentativa automática será feita.";
+
 /** ID curto para correlacionar a mensagem do usuário com a linha de log. */
 export function newCorrelationId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -49,12 +70,103 @@ const TRANSIENT_PATTERNS = [
   "etimedout",
   "econnrefused",
   "timeout",
+  // Rede/DNS instável.
+  "enotfound",
+  "eai_again",
+  "socket hang up",
+  "fetch failed",
+  // Timeout do provedor de coleta (mensagem em português, não casa com
+  // "timeout"). Sem isto, uma lentidão do Google encerraria o job.
+  "excedeu o tempo limite",
+  // Indisponibilidade temporária do provedor: 429 e 5xx são retentáveis.
+  // O provedor formata "Google Places retornou <status>: ...".
+  "retornou 429",
+  "retornou 500",
+  "retornou 502",
+  "retornou 503",
+  "retornou 504",
+  "rate limit",
+  "resource_exhausted",
+  "unavailable",
 ];
 
+/**
+ * Erros PERMANENTES: repetir produz exatamente o mesmo resultado.
+ *
+ * Motivados pela falha real em DEDUP, em que uma violação de unicidade
+ * (SQLSTATE 23505) foi repetida até esgotar `max_attempts`, gastando três
+ * tentativas idênticas e encerrando o job com um motivo genérico.
+ */
+const PERMANENT_SQLSTATES = new Set([
+  "23505", // unique_violation
+  "23503", // foreign_key_violation
+  "23502", // not_null_violation
+  "23514", // check_violation
+  "22P02", // invalid_text_representation
+  "22001", // string_data_right_truncation
+  "42703", // undefined_column
+  "42P01", // undefined_table
+]);
+
+const PERMANENT_PATTERNS = [
+  "duplicate key value",
+  "violates unique constraint",
+  "violates foreign key constraint",
+  "violates not-null constraint",
+  "violates check constraint",
+  "invalid input syntax",
+  "column does not exist",
+  "relation does not exist",
+];
+
+/** SQLSTATE do erro, quando o driver o expõe (postgres.js e PGlite expõem). */
+export function sqlStateOf(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
 export function isTransientError(error: unknown): boolean {
+  // Um erro permanente nunca é transitório, mesmo que a mensagem contenha
+  // alguma das palavras da lista acima.
+  if (isPermanentError(error)) return false;
   const raw = error instanceof Error ? error.message : String(error ?? "");
   const normalized = raw.toLowerCase();
   return TRANSIENT_PATTERNS.some((p) => normalized.includes(p));
+}
+
+/** Determinístico: retentar não muda o resultado. Encerra o job na hora. */
+export function isPermanentError(error: unknown): boolean {
+  if (error instanceof ZodError) return true;
+  const state = sqlStateOf(error);
+  if (state && PERMANENT_SQLSTATES.has(state)) return true;
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = raw.toLowerCase();
+  return PERMANENT_PATTERNS.some((p) => normalized.includes(p));
+}
+
+/**
+ * Mensagem de ESCRITA adequada ao erro, para exibir ao operador.
+ * Nunca inclui SQL, nome de constraint, stack ou credencial.
+ */
+export function toWriteFailureMessage(error: unknown): string {
+  if (sqlStateOf(error) === "23505" || isUniqueViolationMessage(error)) {
+    return IDENTITY_CONFLICT_MESSAGE;
+  }
+  // Só promete retomada automática se de fato houver retry. Um erro
+  // desconhecido e não-transitório encerra o job na hora (ver
+  // `handleTickFailure`): dizer "será retomado automaticamente" ali seria
+  // mentir para o operador, que ficaria esperando algo que não vem.
+  if (isTransientError(error)) return RETRYABLE_MESSAGE;
+  return WRITE_FAILURE_MESSAGE;
+}
+
+function isUniqueViolationMessage(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    raw.includes("duplicate key value") ||
+    raw.includes("violates unique constraint")
+  );
 }
 
 export interface LoggedError {

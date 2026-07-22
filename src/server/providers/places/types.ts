@@ -16,6 +16,11 @@ export interface ProviderSearchQuery {
   minRating?: number | null;
   /** Teto de resultados a puxar nesta consulta (proteção de custo/paginação). */
   limit: number;
+  /**
+   * Token opaco da próxima página, devolvido por uma consulta anterior.
+   * Ausente = primeira página. Provedores sem paginação ignoram.
+   */
+  pageToken?: string | null;
 }
 
 /**
@@ -48,6 +53,11 @@ export interface ProviderSearchOutcome {
   results: ProviderResult[];
   /** Custo estimado desta consulta (0 para provedores sem cobrança). */
   estimatedCost: number;
+  /**
+   * Token da próxima página, quando o provedor indica que há mais resultados.
+   * `null`/ausente significa que esta combinação se esgotou.
+   */
+  nextPageToken?: string | null;
 }
 
 /** Provedor de coleta de negócios locais. */

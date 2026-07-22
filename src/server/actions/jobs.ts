@@ -72,22 +72,19 @@ export async function startProspectJobAction(
       };
     }
 
-    // Nunca duas execuções sobre o mesmo perfil: gastaria Google e IA em
-    // dobro pelos mesmos resultados. Devolvemos a execução em andamento para
-    // a interface levar o usuário ao progresso dela.
-    const running = await repositories.jobs.findActiveByProfile(profileId);
-    if (running) {
-      return { ok: true, jobId: running.id, alreadyRunning: true };
-    }
-
     const deadline = new Date(
       Date.now() + DEFAULT_MAX_DURATION_MINUTES * 60_000,
     ).toISOString();
 
+    // Nunca duas execuções sobre o mesmo perfil: gastaria Google e IA em dobro
+    // pelos mesmos resultados. `createUnique` checa antes E deixa o índice
+    // único do banco arbitrar a corrida — devolve a execução em andamento em
+    // vez de criar outra, e a interface leva o usuário ao progresso dela.
+    //
     // Chave de idempotência por minuto: dois cliques seguidos reaproveitam o
-    // mesmo job em vez de criar execuções concorrentes sobre o mesmo perfil.
+    // mesmo job mesmo quando o anterior já terminou.
     const minute = new Date().toISOString().slice(0, 16);
-    const job = await repositories.jobs.create({
+    const { job, alreadyRunning } = await repositories.jobs.createUnique({
       jobType: "prospect_pipeline",
       searchProfileId: profileId,
       idempotencyKey: `prospect:${profileId}:${minute}`,
@@ -98,6 +95,10 @@ export async function startProspectJobAction(
       payload: { provider: profile.profile.provider },
     });
 
+    if (alreadyRunning) {
+      return { ok: true, jobId: job.id, alreadyRunning: true };
+    }
+
     scheduleNextTick("start");
     revalidatePath("/");
     revalidatePath("/settings/searches");
@@ -105,8 +106,31 @@ export async function startProspectJobAction(
   } catch (error) {
     return {
       ok: false,
-      error: toActionError("action.startProspectJob", error, "Erro ao iniciar a execução."),
+      error: toActionError(
+        "action.startProspectJob",
+        error,
+        "Erro ao iniciar a execução.",
+      ),
     };
+  }
+}
+
+/**
+ * Id da execução em andamento para o perfil, ou null.
+ *
+ * Existe para o botão "Iniciar prospecção" já nascer desabilitado quando outra
+ * aba (ou o agendador) iniciou a execução. Nunca lança: na dúvida devolve
+ * null, e as demais camadas de proteção seguem valendo.
+ */
+export async function getActiveJobForProfileAction(
+  profileId: string,
+): Promise<string | null> {
+  try {
+    const { repositories } = await createServerContext();
+    const active = await repositories.jobs.findActiveByProfile(profileId);
+    return active?.id ?? null;
+  } catch {
+    return null;
   }
 }
 

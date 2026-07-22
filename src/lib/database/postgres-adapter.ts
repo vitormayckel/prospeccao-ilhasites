@@ -101,5 +101,28 @@ export function createPostgresDb(connectionString: string): Db {
       const rows = await limit(() => sql.unsafe(text, params as never[]));
       return normalizeRows<T>(rows as unknown as Record<string, unknown>[]);
     },
+
+    async transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+      // O limitador envolve a transação INTEIRA, não cada query: uma transação
+      // segura uma única conexão do começo ao fim. Limitar por query aqui
+      // permitiria que as queries internas disputassem vaga com outras
+      // transações já em curso e travassem o pool (ver nota 2 acima).
+      return limit(() =>
+        sql.begin(async (txSql) => {
+          const tx: Db = {
+            async query<R>(text: string, params: unknown[] = []): Promise<R[]> {
+              const rows = await txSql.unsafe(text, params as never[]);
+              return normalizeRows<R>(
+                rows as unknown as Record<string, unknown>[],
+              );
+            },
+            // Já estamos dentro de uma transação: reusa a corrente em vez de
+            // abrir outra na mesma conexão, o que o Postgres recusaria.
+            transaction: (inner) => inner(tx),
+          };
+          return fn(tx);
+        }),
+      ) as Promise<T>;
+    },
   };
 }

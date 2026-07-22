@@ -38,6 +38,51 @@ export interface NormalizedCandidate {
 const NAME_SIMILARITY_THRESHOLD = 0.55;
 
 export function createCollectionRepository(db: Db) {
+  /**
+   * Implementação compartilhada por `upsertSource` e `upsertSourceChecked`.
+   * Função local (e não método) de propósito: os repositories são consumidos
+   * também por desestruturação, e um `this` implícito quebraria nesses casos.
+   */
+  async function upsertSourceChecked(
+    companyId: string,
+    candidate: NormalizedCandidate,
+  ): Promise<{ source: CompanySourceRow; conflict: boolean }> {
+    if (candidate.externalId) {
+      const existing = await db.query<CompanySourceRow>(
+        `select * from company_sources
+          where provider = $1 and external_id = $2 limit 1`,
+        [candidate.provider, candidate.externalId],
+      );
+      const found = existing[0];
+      if (found && found.company_id !== companyId) {
+        return { source: found, conflict: true };
+      }
+      if (found) {
+        const rows = await db.query<CompanySourceRow>(
+          `update company_sources
+             set last_seen_at = now(), raw_payload = $2,
+                 source_url = coalesce($3, source_url), updated_at = now()
+           where id = $1 returning *`,
+          [found.id, candidate.rawPayload, candidate.sourceUrl],
+        );
+        return { source: rows[0]!, conflict: false };
+      }
+    }
+    const rows = await db.query<CompanySourceRow>(
+      `insert into company_sources
+         (company_id, provider, external_id, source_url, raw_payload)
+       values ($1,$2,$3,$4,$5) returning *`,
+      [
+        companyId,
+        candidate.provider,
+        candidate.externalId,
+        candidate.sourceUrl,
+        candidate.rawPayload,
+      ],
+    );
+    return { source: rows[0]!, conflict: false };
+  }
+
   return {
     // ---- search_runs (idempotência — RF-03) -------------------------------
     async findRunByIdempotencyKey(key: string): Promise<SearchRunRow | null> {
@@ -135,7 +180,7 @@ export function createCollectionRepository(db: Db) {
     },
 
     // ---- deduplicação (RF-06, ordem de confiança) -------------------------
-    /** Nível 1: mesmo provedor + identificador externo. */
+    /** Nível 1: mesmo provedor + identificador externo (apenas ATIVAS). */
     async findByProviderExternalId(
       provider: string,
       externalId: string,
@@ -148,6 +193,120 @@ export function createCollectionRepository(db: Db) {
         [provider, externalId],
       );
       return rows[0] ?? null;
+    },
+
+    /**
+     * Nível 1 para o fluxo de dedup/reativação: mesmo lookup, mas INCLUINDO
+     * empresas arquivadas (`deleted_at` preenchido).
+     *
+     * Razão de existir — causa raiz da falha em DEDUP:
+     * `uq_company_sources_provider_ext` é único em (provider, external_id) e
+     * NÃO conhece soft delete (company_sources não tem `deleted_at`). Arquivar
+     * uma empresa não libera o Place ID dela, mas a consulta acima deixava de
+     * enxergá-la. O pipeline concluía "é nova", inseria a empresa e batia na
+     * unicidade ao gravar a fonte — deixando uma empresa órfã e abortando o
+     * tick.
+     *
+     * Enxergar a arquivada é o que permite REATIVAR em vez de duplicar. Só
+     * este caminho ignora o soft delete; as demais consultas de dedup
+     * continuam restritas a empresas ativas.
+     */
+    async findByProviderExternalIdIncludingDeleted(
+      provider: string,
+      externalId: string,
+    ): Promise<{ company: CompanyRow; sourceId: string } | null> {
+      const rows = await db.query<CompanyRow & { source_id: string }>(
+        `select c.*, s.id as source_id
+           from company_sources s
+           join companies c on c.id = s.company_id
+          where s.provider = $1 and s.external_id = $2
+          -- Ativa primeiro: se por dados legados houver mais de um vínculo,
+          -- a empresa viva é a resposta correta, nunca a arquivada.
+          order by (c.deleted_at is null) desc, c.created_at
+          limit 1`,
+        [provider, externalId],
+      );
+      const row = rows[0];
+      if (!row) return null;
+      const { source_id, ...company } = row;
+      return { company: company as CompanyRow, sourceId: source_id };
+    },
+
+    /**
+     * Reativa uma empresa arquivada preservando id, histórico, análises,
+     * decisões e auditoria. Só limpa `deleted_at` — nenhum campo operacional
+     * (estágio, dono, score, contato) é tocado aqui.
+     */
+    async restoreCompany(companyId: string): Promise<CompanyRow | null> {
+      const rows = await db.query<CompanyRow>(
+        `update companies
+            set deleted_at = null, updated_at = now()
+          where id = $1 and deleted_at is not null
+          returning *`,
+        [companyId],
+      );
+      return rows[0] ?? null;
+    },
+
+    /**
+     * Atualiza os dados COLETADOS com o que a coleta trouxe agora.
+     *
+     * Diferente de `fillMissingCompanyFields` (que só preenche nulos): na
+     * reativação a coleta é a informação mais recente e deve prevalecer sobre
+     * o que ficou congelado no arquivamento. `coalesce($n, coluna)` mantém o
+     * valor antigo quando o provedor não devolveu o campo — atualizar não pode
+     * significar apagar.
+     *
+     * Campos operacionais (pipeline_stage, review_status, score, owner_id,
+     * contact_stage, priority) NÃO entram: pertencem ao operador, não ao
+     * provedor.
+     */
+    async refreshCompanyFromCandidate(
+      companyId: string,
+      candidate: NormalizedCandidate,
+    ): Promise<void> {
+      await db.query(
+        `update companies set
+           name             = coalesce($2, name),
+           normalized_name  = coalesce($3, normalized_name),
+           primary_category = coalesce($4, primary_category),
+           phone_raw        = coalesce($5, phone_raw),
+           phone_e164       = coalesce($6, phone_e164),
+           website_url      = coalesce($7, website_url),
+           normalized_domain= coalesce($8, normalized_domain),
+           instagram_url    = coalesce($9, instagram_url),
+           address_line     = coalesce($10, address_line),
+           city             = coalesce($11, city),
+           state            = coalesce($12, state),
+           postal_code      = coalesce($13, postal_code),
+           country_code     = coalesce($14, country_code),
+           latitude         = coalesce($15, latitude),
+           longitude        = coalesce($16, longitude),
+           rating           = coalesce($17, rating),
+           reviews_count    = coalesce($18, reviews_count),
+           updated_at       = now()
+         where id = $1`,
+        [
+          companyId,
+          candidate.name,
+          candidate.normalizedName,
+          candidate.primaryCategory,
+          candidate.phoneRaw,
+          candidate.phoneE164,
+          candidate.websiteUrl,
+          candidate.normalizedDomain,
+          candidate.instagramUrl,
+          candidate.addressLine,
+          candidate.city,
+          candidate.state,
+          candidate.postalCode,
+          candidate.countryCode,
+          candidate.latitude,
+          candidate.longitude,
+          candidate.rating,
+          candidate.reviewsCount,
+        ],
+      );
     },
 
     /** Nível 2: mesmo telefone normalizado. */
@@ -229,44 +388,35 @@ export function createCollectionRepository(db: Db) {
     },
 
     /**
-     * Registra/atualiza a proveniência (RN-09). Se já existir a mesma fonte
-     * (provider+external_id), apenas atualiza last_seen_at/payload; senão insere.
+     * Registra/atualiza a proveniência (RN-09).
+     *
+     * A busca prévia é por (provider, external_id) SEM filtrar por empresa —
+     * exatamente o escopo de `uq_company_sources_provider_ext`. A versão
+     * anterior filtrava também por `company_id`: quando a fonte existia
+     * apontando para OUTRA empresa (por exemplo, uma arquivada), o SELECT não
+     * a encontrava e o INSERT seguinte violava a unicidade, abortando o tick.
+     *
+     * Agora, quando a fonte pertence a outra empresa, nada é inserido e o
+     * chamador recebe o vínculo real para decidir — o banco nunca vê um INSERT
+     * que ele fosse recusar.
      */
     async upsertSource(
       companyId: string,
       candidate: NormalizedCandidate,
     ): Promise<CompanySourceRow> {
-      if (candidate.externalId) {
-        const existing = await db.query<CompanySourceRow>(
-          `select * from company_sources
-           where company_id = $1 and provider = $2 and external_id = $3 limit 1`,
-          [companyId, candidate.provider, candidate.externalId],
-        );
-        if (existing[0]) {
-          const rows = await db.query<CompanySourceRow>(
-            `update company_sources
-               set last_seen_at = now(), raw_payload = $2,
-                   source_url = coalesce($3, source_url), updated_at = now()
-             where id = $1 returning *`,
-            [existing[0].id, candidate.rawPayload, candidate.sourceUrl],
-          );
-          return rows[0]!;
-        }
-      }
-      const rows = await db.query<CompanySourceRow>(
-        `insert into company_sources
-           (company_id, provider, external_id, source_url, raw_payload)
-         values ($1,$2,$3,$4,$5) returning *`,
-        [
-          companyId,
-          candidate.provider,
-          candidate.externalId,
-          candidate.sourceUrl,
-          candidate.rawPayload,
-        ],
-      );
-      return rows[0]!;
+      const result = await upsertSourceChecked(companyId, candidate);
+      return result.source;
     },
+
+    /**
+     * Variante explícita de `upsertSource`. `conflict` indica que o
+     * (provider, external_id) já pertencia a outra empresa — a linha devolvida
+     * é a existente, e NADA foi inserido nem re-vinculado.
+     *
+     * Re-vincular em silêncio seria pior que o erro original: mudaria a
+     * proveniência de uma empresa sem rastro. Quem chama decide.
+     */
+    upsertSourceChecked,
 
     /**
      * Preenche campos ausentes na empresa existente sem apagar dados (RN-09):
@@ -279,8 +429,33 @@ export function createCollectionRepository(db: Db) {
       await db.query(
         `update companies set
            primary_category = coalesce(primary_category, $2),
-           phone_raw        = coalesce(phone_raw, $3),
-           phone_e164       = coalesce(phone_e164, $4),
+           -- Telefone só é preenchido se NENHUMA outra empresa ativa já o
+           -- tiver: uq_companies_phone é único entre as não arquivadas, e
+           -- preencher às cegas transformava um back-fill inofensivo em
+           -- violação de constraint — derrubando um candidato legítimo que a
+           -- dedup já havia resolvido corretamente pelo Place ID.
+           phone_raw        = case
+             when phone_raw is not null then phone_raw
+             when $4::text is null then $3
+             when exists (
+               select 1 from companies outra
+                where outra.phone_e164 = $4::text
+                  and outra.deleted_at is null
+                  and outra.id <> $1
+             ) then phone_raw
+             else $3
+           end,
+           phone_e164       = case
+             when phone_e164 is not null then phone_e164
+             when $4::text is null then null
+             when exists (
+               select 1 from companies outra
+                where outra.phone_e164 = $4::text
+                  and outra.deleted_at is null
+                  and outra.id <> $1
+             ) then null
+             else $4::text
+           end,
            website_url      = coalesce(website_url, $5),
            normalized_domain= coalesce(normalized_domain, $6),
            instagram_url    = coalesce(instagram_url, $7),

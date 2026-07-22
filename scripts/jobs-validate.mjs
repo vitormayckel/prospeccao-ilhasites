@@ -39,15 +39,32 @@ console.log("✓ schema + seed carregados");
 const LOCK = "120";
 const profile = (await q("select id from search_profiles limit 1"))[0];
 
-const createJob = async (key, target = 5) =>
-  (
+/**
+ * Cada job de teste recebe o SEU perfil.
+ *
+ * A migration 0012 criou `uq_job_queue_active_profile`: no máximo uma execução
+ * em 'queued'/'running' por perfil. Estes cenários mantêm vários jobs ativos ao
+ * mesmo tempo (claim concorrente, lock expirado, retry), o que é legítimo —
+ * desde que sejam de perfis diferentes, como acontece em produção.
+ *
+ * O cenário que valida a proibição de execução duplicada por perfil fica em
+ * scripts/dedup-reactivation-validate.mjs (§9), com o perfil compartilhado.
+ */
+const createJob = async (key, target = 5) => {
+  const [own] = await q(
+    `insert into search_profiles (name, status, daily_limit, provider)
+     values ($1, 'active', 40, 'fixture') returning id`,
+    [`perfil-${key}`],
+  );
+  return (
     await q(
       `insert into job_queue
          (job_type, search_profile_id, idempotency_key, status, phase, target_qualified)
        values ('prospect_pipeline',$1,$2,'queued','SEARCH',$3) returning *`,
-      [profile.id, key, target],
+      [own.id, key, target],
     )
   )[0];
+};
 
 // Filtro por job_type: a fila é compartilhada com outros tipos de job
 // (o seed já traz linhas em job_queue) e o runner só reivindica os seus.
@@ -311,7 +328,10 @@ await q(
 );
 
 const dupJob = await createJob("gatilho-ui", 3);
-const ativo = await q(ACTIVE_BY_PROFILE, [profile.id]);
+// `createJob` cria o job no seu próprio perfil (ver nota no helper); é esse
+// perfil que este cenário consulta.
+const dupProfileId = dupJob.search_profile_id;
+const ativo = await q(ACTIVE_BY_PROFILE, [dupProfileId]);
 assert(
   ativo.length === 1 && ativo[0].id === dupJob.id,
   "job em andamento é encontrado pelo perfil (2º clique reaproveita)",
@@ -323,7 +343,7 @@ const conflito = await q(
   `insert into job_queue (job_type, search_profile_id, idempotency_key, status, phase, target_qualified)
    values ('prospect_pipeline',$1,'gatilho-ui','queued','SEARCH',3)
    on conflict (idempotency_key) do nothing returning id`,
-  [profile.id],
+  [dupProfileId],
 );
 const depoisDup = (await q("select count(*)::int as c from job_queue"))[0].c;
 assert(conflito.length === 0, "chave de idempotência repetida não insere nada");
@@ -331,7 +351,7 @@ assert(depoisDup === antesDup, `nenhum job duplicado criado (${antesDup} = ${dep
 
 // Encerrado o job, o perfil volta a aceitar nova execução.
 await q("update job_queue set status='completed' where id=$1", [dupJob.id]);
-const aposConclusao = await q(ACTIVE_BY_PROFILE, [profile.id]);
+const aposConclusao = await q(ACTIVE_BY_PROFILE, [dupProfileId]);
 assert(
   aposConclusao.length === 0,
   "após concluir, o perfil aceita uma nova execução",

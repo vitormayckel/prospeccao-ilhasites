@@ -1,11 +1,24 @@
 import "server-only";
+import type { Db } from "@/lib/database/sql";
+import { createJobsRepository } from "@/server/repositories/jobs-repository";
 import type { JobsRepository } from "@/server/repositories/jobs-repository";
+import { createCollectionRepository } from "@/server/repositories/collection-repository";
 import type { CollectionRepository } from "@/server/repositories/collection-repository";
 import type { NormalizedCandidate } from "@/server/repositories/collection-repository";
+import { createAuditRepository } from "@/server/repositories/audit-repository";
 import type { SearchProfilesRepository } from "@/server/repositories/search-profiles-repository";
 import type { AnalysisService } from "@/server/services/analysis-service";
-import type { JobPhase, JobRow, CompanyRow } from "@/types/domain";
-import type { ProviderResult, ProviderSearchQuery } from "@/server/providers/places";
+import type {
+  JobPhase,
+  JobRow,
+  CompanyRow,
+  JobCandidateRow,
+} from "@/types/domain";
+import type {
+  PlacesProvider,
+  ProviderResult,
+  ProviderSearchQuery,
+} from "@/server/providers/places";
 import { resolveProviderForRun } from "@/server/providers/places";
 import {
   normalizeName,
@@ -17,7 +30,14 @@ import {
   normalizeAddress,
   isSocialDomain,
 } from "@/server/services/normalization";
-import { logInfo, logAndSanitize, isTransientError, redact } from "@/lib/errors";
+import {
+  logInfo,
+  logAndSanitize,
+  isTransientError,
+  isPermanentError,
+  toWriteFailureMessage,
+  redact,
+} from "@/lib/errors";
 
 // =====================================================================
 // Runner do pipeline de prospecção.
@@ -57,8 +77,28 @@ const ANALYSIS_CONCURRENCY = Number(process.env.ANALYSIS_CONCURRENCY || 2);
 /** Piso de score. 0 = desativado (nenhuma desclassificação por nota). */
 const MIN_SCORE = Number(process.env.PIPELINE_MIN_SCORE || 0);
 
-/** Resultados pedidos por chamada ao provedor. */
+/** Resultados pedidos por chamada ao provedor (tamanho de UMA página). */
 const PER_QUERY_CAP = 20;
+
+/**
+ * Páginas por combinação cidade×categoria.
+ *
+ * O Text Search do Google entrega no máximo 3 páginas (60 resultados) por
+ * consulta — pedir mais é gastar chamada à toa. Antes o pipeline parava na
+ * página 1: o `nextPageToken` existia no tipo de resposta e nunca era usado,
+ * então cada combinação rendia no máximo 20 resultados.
+ */
+const MAX_PAGES_PER_COMBO = Math.max(
+  1,
+  Number(process.env.PIPELINE_MAX_PAGES_PER_COMBO || 3),
+);
+
+/**
+ * Carência antes de usar um `pageToken`. O token não fica válido no mesmo
+ * instante em que é emitido; pedir cedo demais devolve erro. Esperamos apenas
+ * o que falta desde a emissão, nunca um valor fixo por página.
+ */
+const PAGE_TOKEN_MIN_DELAY_MS = 2_000;
 
 export interface TickResult {
   picked: boolean;
@@ -78,12 +118,20 @@ interface Combo {
 }
 
 export function createJobRunner(deps: {
+  /**
+   * Conexão de banco. Necessária para abrir transações: a etapa DEDUP grava
+   * empresa + fonte + evidência + estado do candidato como uma unidade.
+   */
+  db: Db;
   jobs: JobsRepository;
   collection: CollectionRepository;
   searchProfiles: SearchProfilesRepository;
   analysis: AnalysisService;
+  /** Injetável para teste; em produção resolve pelo nome do perfil. */
+  resolveProvider?: (providerName: string) => PlacesProvider;
 }) {
-  const { jobs, collection, searchProfiles, analysis } = deps;
+  const { db, jobs, collection, searchProfiles, analysis } = deps;
+  const resolveProvider = deps.resolveProvider ?? resolveProviderForRun;
 
   /**
    * Executa um tick: reivindica um job e avança o que couber no orçamento.
@@ -130,7 +178,7 @@ export function createJobRunner(deps: {
           };
         }
 
-        const next = await runStep(current, workerId);
+        const next = await runStep(current, workerId, remaining);
         steps++;
 
         if (next === "FINISHED") {
@@ -172,7 +220,18 @@ export function createJobRunner(deps: {
     }
   }
 
-  /** Falha do tick: transitória vira retry com backoff; o resto encerra. */
+  /**
+   * Falha do tick.
+   *
+   * A decisão de retentar é do `isTransientError`: SÓ erro transitório vira
+   * nova tentativa. Antes o retry era incondicional, e uma violação de
+   * unicidade (permanente por definição) era repetida até esgotar
+   * `max_attempts` — três tentativas idênticas, um minuto perdido e um motivo
+   * de encerramento genérico ("max_attempts_reached") que não dizia nada ao
+   * operador.
+   *
+   * Erro permanente encerra o job na hora, com motivo e mensagem próprios.
+   */
   async function handleTickFailure(
     job: JobRow,
     error: unknown,
@@ -183,6 +242,34 @@ export function createJobRunner(deps: {
       phase: job.phase,
     });
     const detail = error instanceof Error ? redact(error.message) : "";
+    const transient = isTransientError(error);
+
+    if (!transient) {
+      // Mensagem de ESCRITA, não de leitura: a falha aconteceu ao gravar.
+      const userMessage = `${toWriteFailureMessage(error)} (ref: ${logged.correlationId})`;
+      await failJob(job, {
+        reason: "erro_permanente",
+        userMessage,
+        detail: `[${logged.correlationId}] ${detail}`,
+      });
+
+      logInfo("job.tick.failure", {
+        jobId: job.id,
+        phase: job.phase,
+        transient: false,
+        permanent: isPermanentError(error),
+        retried: false,
+        correlationId: logged.correlationId,
+      });
+
+      return {
+        picked: true,
+        jobId: job.id,
+        phase: "FINISHED",
+        hasMoreWork: false,
+        steps,
+      };
+    }
 
     // Backoff exponencial com teto — nunca retry infinito: `attempts` já foi
     // incrementado no claim e `max_attempts` encerra o job.
@@ -193,10 +280,20 @@ export function createJobRunner(deps: {
       errorDetail: `[${logged.correlationId}] ${detail}`,
     });
 
+    // Tentativas esgotadas encerram o job de fato: o run de coleta precisa
+    // sair de 'running', senão fica preso para sempre (§8 — transparência).
+    if (exhausted) {
+      await finalizeSearchRun(job, {
+        status: "failed",
+        errorCode: "max_attempts_reached",
+        errorMessage: logged.message,
+      });
+    }
+
     logInfo("job.tick.failure", {
       jobId: job.id,
       phase: job.phase,
-      transient: isTransientError(error),
+      transient: true,
       exhausted,
       retryInSeconds: exhausted ? 0 : delay,
       correlationId: logged.correlationId,
@@ -211,15 +308,75 @@ export function createJobRunner(deps: {
     };
   }
 
+  /** Encerra o job por erro que não se resolve sozinho. */
+  async function failJob(
+    job: JobRow,
+    input: { reason: string; userMessage: string; detail: string },
+  ): Promise<void> {
+    await jobs.finish(job.id, {
+      status: "failed",
+      phase: job.phase,
+      reason: input.reason,
+      errorSummary: input.userMessage,
+      errorDetail: input.detail,
+    });
+    await finalizeSearchRun(job, {
+      status: "failed",
+      errorCode: input.reason,
+      errorMessage: input.userMessage,
+    });
+  }
+
+  /**
+   * Fecha o `search_run` do job com os números já apurados.
+   *
+   * Antes só o caminho feliz chamava `finishRun`; um job que falhava deixava o
+   * run em 'running' com `finished_at` nulo permanentemente. Dois runs desta
+   * execução ficaram exatamente assim.
+   */
+  async function finalizeSearchRun(
+    job: JobRow,
+    input: {
+      status: "failed" | "partial" | "completed";
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    },
+  ): Promise<void> {
+    // Recarrega SEMPRE, e é daqui que sai o `search_run_id`.
+    //
+    // O `job` em memória é o estado do início do passo: quando o run foi
+    // criado dentro do passo que falhou (`ensureSearchRun`), o vínculo já está
+    // no banco mas ainda é null na cópia local. Ler o campo local fazia esta
+    // função retornar cedo e deixar o run preso em 'running' — exatamente o
+    // sintoma que ela existe para evitar.
+    const fresh = (await jobs.getById(job.id)) ?? job;
+    const runId = fresh.search_run_id ?? job.search_run_id;
+    if (!runId) return;
+    await collection.finishRun(runId, {
+      status: input.status,
+      resultsSeen: fresh.results_raw,
+      newCompanies: fresh.count_new,
+      duplicates: fresh.count_duplicate + fresh.count_existing,
+      failedItems: fresh.count_failed,
+      estimatedCost: 0,
+      errorCode: input.errorCode ?? null,
+      errorMessage: input.errorMessage ?? null,
+    });
+  }
+
   /** Um passo da máquina de estados. Devolve a próxima fase. */
-  async function runStep(job: JobRow, workerId: string): Promise<JobPhase> {
+  async function runStep(
+    job: JobRow,
+    workerId: string,
+    remainingMs: () => number,
+  ): Promise<JobPhase> {
     // Heartbeat: o lock não pode expirar enquanto o tick trabalha.
     await jobs.renewLock(job.id, workerId);
 
     switch (job.phase) {
       case "SEARCH":
       case "SEARCH_REPLACEMENTS":
-        return stepSearch(job);
+        return stepSearch(job, remainingMs);
       case "NORMALIZE":
         return stepNormalize(job);
       case "DEDUP":
@@ -235,7 +392,10 @@ export function createJobRunner(deps: {
 
   // ---- SEARCH ---------------------------------------------------------
 
-  async function stepSearch(job: JobRow): Promise<JobPhase> {
+  async function stepSearch(
+    job: JobRow,
+    remainingMs: () => number,
+  ): Promise<JobPhase> {
     // Sem orçamento de busca: segue processando o que já foi coletado.
     if (!canSearch(job)) return "NORMALIZE";
 
@@ -245,7 +405,25 @@ export function createJobRunner(deps: {
       return "NORMALIZE";
     }
 
+    // A carência do `pageToken` não cabe no que resta do tick.
+    //
+    // Dormir mesmo assim estouraria o orçamento (o laço admite um passo com
+    // 1,5 s restantes, e a espera vai a 2 s) e, no plano Hobby, poderia levar
+    // a função ao teto de 10 s e ser morta no meio. O token continua salvo no
+    // cursor: o próximo tick retoma esta mesma página sem perder nada.
+    const espera = pageTokenWaitMs(job);
+    if (espera > 0 && espera >= remainingMs() - CLOSING_RESERVE_MS) {
+      logInfo("job.search.deferPage", {
+        jobId: job.id,
+        waitMs: espera,
+        remainingMs: remainingMs(),
+      });
+      return "NORMALIZE";
+    }
+
     const combo = combos[job.cursor_combo]!;
+    // Só posição, para o painel. `pageToken` omitido de propósito: preserva o
+    // token e o instante de emissão (ver `setCursor`).
     await jobs.setCursor(job.id, {
       combo: job.cursor_combo,
       page: job.cursor_page,
@@ -257,9 +435,13 @@ export function createJobRunner(deps: {
     // O run de coleta é criado uma vez e reaproveitado (proveniência).
     const runId = await ensureSearchRun(job);
 
-    const provider = resolveProviderForRun(
+    const provider = resolveProvider(
       (job.payload.provider as string) || "google_places",
     );
+
+    // Continuação da mesma combinação: respeita a carência do token. A espera
+    // já foi medida acima e cabe no orçamento restante.
+    if (espera > 0) await sleep(espera);
 
     const query: ProviderSearchQuery = {
       category: combo.term,
@@ -269,6 +451,7 @@ export function createJobRunner(deps: {
       state: combo.state,
       countryCode: combo.countryCode,
       limit: PER_QUERY_CAP,
+      pageToken: job.cursor_page_token,
     };
 
     const outcome = await provider.search(query);
@@ -291,26 +474,83 @@ export function createJobRunner(deps: {
       count_duplicate: outcome.results.length - inserted,
     });
 
-    // Uma combinação por passo: o provedor devolve a página cheia de uma vez.
-    await jobs.setCursor(job.id, {
-      combo: job.cursor_combo + 1,
-      page: 0,
-      city: combo.city,
-      state: combo.state,
-      term: combo.term,
-    });
+    // -----------------------------------------------------------------
+    // Paginação: continuar na MESMA combinação ou avançar para a próxima.
+    //
+    // Continuar exige, simultaneamente:
+    //   - o provedor ter oferecido a próxima página;
+    //   - não ter estourado o teto de páginas por combinação;
+    //   - ainda haver orçamento de chamadas ao provedor (contando a que
+    //     acabou de sair);
+    //   - ainda haver orçamento de IA: sem ele o candidato coletado nunca
+    //     seria analisado, então a página extra é dinheiro gasto no Google por
+    //     resultado que morre em pending_analysis;
+    //   - a meta de QUALIFICADAS ainda não ter sido atingida — paginar além da
+    //     meta é gastar chamada paga por resultado que ninguém vai usar.
+    // -----------------------------------------------------------------
+    const nextPage = job.cursor_page + 1;
+    const budgetLeft = job.used_provider_calls + 1 < job.max_provider_calls;
+    const continuaMesmoCombo =
+      Boolean(outcome.nextPageToken) &&
+      nextPage < MAX_PAGES_PER_COMBO &&
+      budgetLeft &&
+      canAnalyze(job) &&
+      job.count_qualified < job.target_qualified;
+
+    await jobs.setCursor(
+      job.id,
+      continuaMesmoCombo
+        ? {
+            combo: job.cursor_combo,
+            page: nextPage,
+            pageToken: outcome.nextPageToken ?? null,
+            city: combo.city,
+            state: combo.state,
+            term: combo.term,
+          }
+        : {
+            combo: job.cursor_combo + 1,
+            page: 0,
+            // Token sempre limpo ao trocar de combinação: um token pertence à
+            // consulta que o gerou e não vale para outra cidade/categoria.
+            pageToken: null,
+            city: combo.city,
+            state: combo.state,
+            term: combo.term,
+          },
+    );
 
     logInfo("job.search.page", {
       jobId: job.id,
       city: combo.city,
       state: combo.state,
       term: combo.term,
+      page: job.cursor_page,
       raw: outcome.results.length,
       staged: inserted,
+      hasNextPage: Boolean(outcome.nextPageToken),
+      continua: continuaMesmoCombo,
       runId,
     });
 
     return "NORMALIZE";
+  }
+
+  /**
+   * Quanto ainda falta da carência do `pageToken`, em ms. 0 quando não há
+   * token ou quando ele já está pronto. Nunca passa de
+   * PAGE_TOKEN_MIN_DELAY_MS, mesmo com relógio adiantado.
+   */
+  function pageTokenWaitMs(job: JobRow): number {
+    if (!job.cursor_page_token || !job.cursor_page_token_at) return 0;
+    const elapsed = Date.now() - new Date(job.cursor_page_token_at).getTime();
+    const wait = PAGE_TOKEN_MIN_DELAY_MS - elapsed;
+    if (wait <= 0) return 0;
+    return Math.min(wait, PAGE_TOKEN_MIN_DELAY_MS);
+  }
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // ---- NORMALIZE ------------------------------------------------------
@@ -354,43 +594,132 @@ export function createJobRunner(deps: {
     const runId = await ensureSearchRun(job);
 
     for (const row of batch) {
-      const candidate = row.normalized as unknown as NormalizedCandidate;
+      try {
+        await processCandidate(job, row, runId);
+      } catch (error) {
+        // Erro TRANSITÓRIO derruba o tick de propósito: o candidato continua
+        // em 'pending_dedup' e a próxima tentativa o reprocessa do zero (a
+        // transação garante que nada parcial ficou).
+        if (isTransientError(error)) throw error;
+
+        // Erro PERMANENTE é do candidato, não do job: repetir o lote inteiro
+        // não muda nada e mataria a execução por causa de uma linha. O
+        // candidato é posto em quarentena com o motivo real e o pipeline
+        // segue. Nada foi gravado — a transação já reverteu.
+        const logged = logAndSanitize("job.dedup.candidate", error, {
+          jobId: job.id,
+          candidateId: row.id,
+          externalId: row.external_id,
+        });
+        await jobs.resolveCandidate(row.id, {
+          stage: "invalid",
+          reason: "conflito_de_identidade",
+        });
+        await jobs.bumpCounters(job.id, { count_failed: 1 });
+        logInfo("job.dedup.quarantine", {
+          jobId: job.id,
+          candidateId: row.id,
+          externalId: row.external_id,
+          correlationId: logged.correlationId,
+        });
+      }
+    }
+    return "DEDUP";
+  }
+
+  /**
+   * Processa UM candidato de forma atômica.
+   *
+   * Tudo o que decide e grava o destino do candidato — encontrar a empresa,
+   * reativar arquivada, criar nova, gravar fonte, evidência, nota de duplicata
+   * incerta, contadores e o próprio estágio do candidato — acontece dentro de
+   * uma única transação.
+   *
+   * Sem isso, a falha real de 2026-07-22 gravava a empresa e explodia ao
+   * gravar a fonte, deixando uma empresa órfã (sem fonte, sem evidência, fora
+   * dos contadores) a cada tentativa. Agora, ou tudo entra, ou nada entra.
+   */
+  async function processCandidate(
+    job: JobRow,
+    row: JobCandidateRow,
+    runId: string,
+  ): Promise<void> {
+    const candidate = row.normalized as unknown as NormalizedCandidate;
+
+    await db.transaction(async (tx) => {
+      const col = createCollectionRepository(tx);
+      const jb = createJobsRepository(tx);
+      const audit = createAuditRepository(tx);
 
       if (
-        await collection.isSuppressed({
+        await col.isSuppressed({
           phoneE164: candidate.phoneE164,
           normalizedDomain: candidate.normalizedDomain,
         })
       ) {
-        await jobs.resolveCandidate(row.id, {
+        await jb.resolveCandidate(row.id, {
           stage: "suppressed",
           reason: "lista_de_supressao",
         });
-        await jobs.bumpCounters(job.id, { count_suppressed: 1 });
-        continue;
+        await jb.bumpCounters(job.id, { count_suppressed: 1 });
+        return;
       }
 
       // Ordem de confiança da deduplicação:
-      //   1. Place ID   — identidade forte do provedor
+      //   1. Place ID   — identidade forte do provedor, INCLUSIVE arquivadas
       //   2. Telefone   — identidade forte do negócio
       //   3. Domínio PRÓPRIO — nunca rede social (candidate.normalizedDomain
       //      já vem null para instagram/facebook/linktree/wa.me etc.)
       //   4. Nome + cidade — tratado adiante como INCERTO, nunca fusão
       let exact: CompanyRow | null = null;
       let reason: string | null = null;
+
+      // Nível 1. Este é o único nível que enxerga empresas arquivadas, e é
+      // deliberado: o Place ID é a identidade que o índice único protege.
+      // Ignorar a arquivada aqui foi exatamente a causa da falha.
       if (candidate.externalId) {
-        exact = await collection.findByProviderExternalId(
+        const hit = await col.findByProviderExternalIdIncludingDeleted(
           candidate.provider,
           candidate.externalId,
         );
-        if (exact) reason = "mesmo_place_id";
+        if (hit) {
+          if (hit.company.deleted_at) {
+            // Reativação: mesmo id, histórico/análises/auditoria preservados.
+            const restored = await col.restoreCompany(hit.company.id);
+            await col.refreshCompanyFromCandidate(hit.company.id, candidate);
+            await audit.log({
+              entityType: "company",
+              entityId: hit.company.id,
+              action: "company.reactivated",
+              metadata: {
+                jobId: job.id,
+                searchRunId: runId,
+                provider: candidate.provider,
+                externalId: candidate.externalId,
+                archivedAt: hit.company.deleted_at,
+                previousName: hit.company.name,
+                collectedName: candidate.name,
+              },
+            });
+            exact = restored ?? hit.company;
+            reason = "empresa_reativada";
+          } else {
+            exact = hit.company;
+            reason = "mesmo_place_id";
+          }
+        }
       }
+
       if (!exact && candidate.phoneE164) {
-        exact = await collection.findByPhone(candidate.phoneE164);
+        exact = await col.findByPhone(candidate.phoneE164);
         if (exact) reason = "mesmo_telefone";
       }
-      if (!exact && candidate.normalizedDomain && !isSocialDomain(candidate.normalizedDomain)) {
-        const byDomain = await collection.findByDomain(candidate.normalizedDomain);
+      if (
+        !exact &&
+        candidate.normalizedDomain &&
+        !isSocialDomain(candidate.normalizedDomain)
+      ) {
+        const byDomain = await col.findByDomain(candidate.normalizedDomain);
         // Telefone divergente VETA o match por domínio: filiais de uma mesma
         // rede compartilham o site corporativo, mas são negócios distintos —
         // endereço, telefone e decisor próprios. Observado com "Rede Odonto"
@@ -406,50 +735,82 @@ export function createJobRunner(deps: {
       }
 
       if (exact) {
-        // Preserva proveniência sem reanalisar nem sobrescrever dados.
-        const source = await collection.upsertSource(exact.id, candidate);
-        await collection.fillMissingCompanyFields(exact.id, candidate);
-        await collection.insertFieldEvidence(
+        const { source, conflict } = await col.upsertSourceChecked(
+          exact.id,
+          candidate,
+        );
+        // O Place ID pertence a OUTRA empresa (dedup casou por telefone ou
+        // domínio com um registro diferente). Não re-vinculamos em silêncio:
+        // isso reescreveria a proveniência alheia. Registra e segue.
+        if (conflict) {
+          await jb.resolveCandidate(row.id, {
+            stage: "duplicate",
+            companyId: source.company_id,
+            reason: "place_id_de_outra_empresa",
+          });
+          await jb.bumpCounters(job.id, { count_duplicate: 1 });
+          return;
+        }
+
+        // Reativada recebe os dados novos; já ativa só preenche lacunas
+        // (nunca sobrescreve o que o operador já viu).
+        if (reason !== "empresa_reativada") {
+          await col.fillMissingCompanyFields(exact.id, candidate);
+        }
+        await col.insertFieldEvidence(
           exact.id,
           source.id,
           evidenceOf(candidate),
         );
-        await jobs.resolveCandidate(row.id, {
+        await jb.resolveCandidate(row.id, {
           stage: "existing",
           companyId: exact.id,
           reason,
         });
-        await jobs.bumpCounters(job.id, { count_existing: 1 });
-        continue;
+        await jb.bumpCounters(job.id, { count_existing: 1 });
+        return;
       }
 
       // Nível 4: nome semelhante na mesma cidade → entra, mas sinalizado.
-      const similar = await collection.findSimilarByName(
+      const similar = await col.findSimilarByName(
         candidate.normalizedName,
         candidate.city,
       );
 
-      const company = await collection.insertCompany(candidate, runId);
-      const source = await collection.upsertSource(company.id, candidate);
-      await collection.insertFieldEvidence(
+      const company = await col.insertCompany(candidate, runId);
+      const { source, conflict } = await col.upsertSourceChecked(
+        company.id,
+        candidate,
+      );
+      // Rede de segurança: o nível 1 já teria encontrado este Place ID. Se
+      // ainda assim houver conflito, abortamos a transação — a empresa recém
+      // inserida é revertida e o candidato vai para quarentena. Nunca uma
+      // órfã.
+      if (conflict) {
+        throw new IdentityConflictError(
+          candidate.provider,
+          candidate.externalId,
+        );
+      }
+
+      await col.insertFieldEvidence(
         company.id,
         source.id,
         evidenceOf(candidate),
       );
       if (similar) {
-        await collection.addUncertainDuplicateNote(company.id, {
+        await col.addUncertainDuplicateNote(company.id, {
           id: similar.company.id,
           name: similar.company.name,
           similarity: similar.similarity,
         });
       }
-      await jobs.resolveCandidate(row.id, {
+      await jb.resolveCandidate(row.id, {
         stage: "new",
         companyId: company.id,
       });
-      await jobs.bumpCounters(job.id, { count_new: 1 });
-    }
-    return "DEDUP";
+      await jb.bumpCounters(job.id, { count_new: 1 });
+    });
   }
 
   // ---- ANALYZE --------------------------------------------------------
@@ -593,17 +954,10 @@ export function createJobRunner(deps: {
     });
 
     // Fecha o run de coleta com os números finais (transparência §8).
-    if (job.search_run_id) {
-      await collection.finishRun(job.search_run_id, {
-        status:
-          counts.qualified >= job.target_qualified ? "completed" : "partial",
-        resultsSeen: job.results_raw,
-        newCompanies: job.count_new,
-        duplicates: job.count_duplicate + job.count_existing,
-        failedItems: job.count_failed,
-        estimatedCost: 0,
-      });
-    }
+    await finalizeSearchRun(job, {
+      status:
+        counts.qualified >= job.target_qualified ? "completed" : "partial",
+    });
 
     logInfo("job.finished", {
       jobId: job.id,
@@ -699,6 +1053,25 @@ function evidenceOf(
     { field: "instagram", value: candidate.instagramUrl },
     { field: "address", value: candidate.addressLine },
   ];
+}
+
+/**
+ * Colisão de identidade forte: o (provider, external_id) do candidato já
+ * pertence a outra empresa.
+ *
+ * Carrega `code = "23505"` de propósito — é a mesma classe de problema que o
+ * banco reportaria, e assim `isPermanentError` a reconhece sem precisar de um
+ * caso especial. Permanente por definição: retentar dá o mesmo resultado.
+ */
+export class IdentityConflictError extends Error {
+  readonly code = "23505";
+
+  constructor(provider: string, externalId: string | null) {
+    super(
+      `Identificador ${provider}:${externalId ?? "(nulo)"} já pertence a outra empresa.`,
+    );
+    this.name = "IdentityConflictError";
+  }
 }
 
 export type JobRunner = ReturnType<typeof createJobRunner>;

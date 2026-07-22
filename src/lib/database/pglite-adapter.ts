@@ -39,5 +39,25 @@ export async function createPgliteDb(): Promise<Db> {
       const result = await pg.query<Record<string, unknown>>(text, params);
       return normalizeRows<T>(result.rows);
     },
+
+    async transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+      // `pg.transaction` já faz BEGIN/COMMIT e ROLLBACK ao lançar.
+      return pg.transaction(async (txn) => {
+        const tx: Db = {
+          async query<R>(text: string, params: unknown[] = []): Promise<R[]> {
+            const result = await txn.query<Record<string, unknown>>(
+              text,
+              params,
+            );
+            return normalizeRows<R>(result.rows);
+          },
+          // Transação aninhada reusa a corrente: o PGlite não tem savepoint
+          // exposto aqui, e aninhar de verdade daria a falsa impressão de um
+          // rollback parcial que não existe.
+          transaction: (inner) => inner(tx),
+        };
+        return fn(tx);
+      }) as Promise<T>;
+    },
   };
 }
