@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/format";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
 import { getJobProgressAction, nudgeJobsAction } from "@/server/actions/jobs";
 import type { JobRow, JobPhase } from "@/types/domain";
@@ -63,14 +64,6 @@ const FINISH_REASON: Record<string, string> = {
   erro_permanente:
     "A execução parou em um erro que não se resolve sozinho. Repetir daria o mesmo resultado, então nenhuma nova tentativa foi feita.",
 };
-
-/** Hora local (São Paulo) no formato HH:MM:SS. */
-function hora(iso: string): string {
-  return new Date(iso).toLocaleTimeString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour12: false,
-  });
-}
 
 /** Duração compacta: 4min25s, 1h02min, 12s. */
 function duracao(inicio: string, fim: string): string {
@@ -176,13 +169,13 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
               <span>
                 Início:{" "}
                 <span className="tnum text-text-secondary">
-                  {hora(job.started_at)}
+                  {formatTime(job.started_at)}
                 </span>
               </span>
               <span>
                 Término:{" "}
                 <span className="tnum text-text-secondary">
-                  {job.finished_at ? hora(job.finished_at) : "—"}
+                  {job.finished_at ? formatTime(job.finished_at) : "—"}
                 </span>
               </span>
               <span>
@@ -345,7 +338,7 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
           garante o encadeamento dos ticks até existir um Cron por minuto. */}
       <p className="mt-3.5 text-micro text-text-muted">
         {isActive
-          ? `Atualizado às ${updatedAt.toLocaleTimeString("pt-BR")} · mantenha esta aba aberta até a execução concluir`
+          ? `Atualizado às ${formatTime(updatedAt)} · mantenha esta aba aberta até a execução concluir`
           : null}
       </p>
     </section>

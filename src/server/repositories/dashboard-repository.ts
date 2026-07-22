@@ -93,13 +93,16 @@ export function createDashboardRepository(db: Db) {
              where review_status = 'pending_analysis' and deleted_at is null) as "pendingAnalysis",
           (select count(*)::int from companies
              where pipeline_stage = 'approved' and deleted_at is null) as "approvedAwaitingMessage",
+          -- SP_DAY_START e não date_trunc('day', now()): a sessão do Postgres
+          -- roda em UTC, então o corte do dia caía 3h adiantado e um
+          -- follow-up do fim da tarde já contava como "atrasado".
           (select count(*)::int from follow_ups
              where status = 'pending' and deleted_at is null
-               and due_at >= date_trunc('day', now())
-               and due_at < date_trunc('day', now()) + interval '1 day') as "followUpsDueToday",
+               and due_at >= ${SP_DAY_START}
+               and due_at < ${SP_DAY_START} + interval '1 day') as "followUpsDueToday",
           (select count(*)::int from follow_ups
              where status = 'pending' and deleted_at is null
-               and due_at < date_trunc('day', now())) as "followUpsOverdue",
+               and due_at < ${SP_DAY_START}) as "followUpsOverdue",
           (select count(*)::int from companies
              where created_at >= now() - interval '30 days' and deleted_at is null) as "foundLast30Days",
           (select count(*)::int from companies
