@@ -64,7 +64,10 @@ async function drainTicks(reason: string): Promise<void> {
     const { services, repositories } = await createServerContext();
     let ticks = 0;
 
-    while (remaining() > DEFAULT_TICK_BUDGET_MS) {
+    // Dobro do orçamento: uma iteração pode gastar DUAS fatias (prospecção e,
+    // se ela não pegou nada, recuperação). Sem esta folga a última iteração
+    // estouraria o `maxDuration` da rota.
+    while (remaining() > DEFAULT_TICK_BUDGET_MS * 2) {
       const result = await services.jobRunner.runTick({
         budgetMs: DEFAULT_TICK_BUDGET_MS,
       });
@@ -79,6 +82,23 @@ async function drainTicks(reason: string): Promise<void> {
       });
 
       if (result.picked && result.hasMoreWork) continue;
+
+      // A prospecção não tinha o que fazer: tenta a recuperação de análises.
+      // A fila é a mesma e a corrente é a mesma — é isso que faz um clique em
+      // "Recuperar análises" concluir sozinho, como a prospecção.
+      if (!result.picked) {
+        const rec = await services.analysisRecoveryRunner.runTick({
+          budgetMs: DEFAULT_TICK_BUDGET_MS,
+        });
+        if (rec.picked) {
+          logInfo("recovery.tick.done", {
+            jobId: rec.jobId ?? null,
+            processed: rec.processed,
+            hasMoreWork: rec.hasMoreWork,
+          });
+          if (rec.hasMoreWork) continue;
+        }
+      }
 
       // Nada reivindicável AGORA. Pode ser: (a) fila vazia — encerra; ou
       // (b) job em backoff, ou preso por outro worker — nesse caso esperar
@@ -130,9 +150,19 @@ export async function POST(request: NextRequest) {
       const result = await services.jobRunner.runTick({
         budgetMs: DEFAULT_TICK_BUDGET_MS,
       });
+      const recovery = result.picked
+        ? null
+        : await services.analysisRecoveryRunner.runTick({
+            budgetMs: DEFAULT_TICK_BUDGET_MS,
+          });
       const pendente = await repositories.jobs.msUntilNextRunnable();
       if (pendente !== null) await scheduleNextTick("chain");
-      return NextResponse.json({ ok: true, ...result, nextInMs: pendente });
+      return NextResponse.json({
+        ok: true,
+        ...result,
+        recovery,
+        nextInMs: pendente,
+      });
     } catch (error) {
       const logged = logAndSanitize("api.jobs.tick.sync", error);
       return NextResponse.json(

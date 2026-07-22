@@ -5,6 +5,19 @@ import type { NormalizedCandidate } from "@/server/repositories/collection-repos
 /** Tempo de posse do job por um worker. Expirado, outro tick pode retomar. */
 export const LOCK_SECONDS = 120;
 
+/** Tipo do job de recuperação de análises. */
+export const ANALYSIS_RECOVERY_JOB = "analysis_recovery";
+
+/**
+ * Tipos que a rota de tick sabe executar. Qualquer um deles mantém a corrente
+ * de ticks viva — é o que faz a recuperação concluir sozinha, como a
+ * prospecção.
+ */
+export const RUNNABLE_JOB_TYPES = [
+  "prospect_pipeline",
+  ANALYSIS_RECOVERY_JOB,
+] as const;
+
 export interface CreateJobInput {
   jobType: string;
   searchProfileId: string;
@@ -80,6 +93,16 @@ export function createJobsRepository(db: Db) {
     return rows[0] ?? null;
   }
 
+  async function findActiveAnalysisRecovery(): Promise<JobRow | null> {
+    const rows = await db.query<JobRow>(
+      `select * from job_queue
+        where job_type = $1 and status in ('queued','running')
+        order by created_at desc limit 1`,
+      [ANALYSIS_RECOVERY_JOB],
+    );
+    return rows[0] ?? null;
+  }
+
   return {
     create,
     findActiveByProfile,
@@ -108,6 +131,99 @@ export function createJobsRepository(db: Db) {
         const winner = await findActiveByProfile(input.searchProfileId);
         // Sem job ativo após um 23505 significa que a violação veio de outra
         // restrição — repassa, senão o erro real ficaria escondido.
+        if (!winner) throw error;
+        return { job: winner, alreadyRunning: true };
+      }
+    },
+
+    /** Recuperação de análises já ativa, se houver. */
+    findActiveAnalysisRecovery,
+
+    /**
+     * Próximas empresas a reprocessar NESTE job de recuperação.
+     *
+     * Exclui as que o próprio job já tentou. Sem esse recorte, uma empresa que
+     * falha volta a `analysis_failed` e é reivindicada de novo pelo mesmo job:
+     * com a IA fora do ar isso vira um laço que queima o orçamento repetindo
+     * as mesmas empresas, e o progresso passa do total (25/22).
+     */
+    async listPendingForRecovery(
+      jobId: string,
+      limit: number,
+    ): Promise<{ id: string }[]> {
+      return db.query<{ id: string }>(
+        `select c.id from companies c
+          where c.review_status in ('pending_analysis', 'analysis_failed')
+            and c.deleted_at is null
+            and not exists (
+              select 1 from job_candidates jc
+               where jc.job_id = $1 and jc.company_id = c.id
+            )
+          order by c.created_at asc
+          limit ${Number(limit)}`,
+        [jobId],
+      );
+    },
+
+    /** Registra a tentativa desta empresa neste job de recuperação. */
+    async markRecoveryAttempt(
+      jobId: string,
+      companyId: string,
+      stage: string,
+      reason: string | null,
+    ): Promise<void> {
+      await db.query(
+        `insert into job_candidates (job_id, provider, external_id, stage, company_id, reason)
+         values ($1, 'analysis_recovery', null, $2, $3, $4)`,
+        [jobId, stage, companyId, reason],
+      );
+    },
+
+    /**
+     * Cria o job de recuperação de análises, garantindo UM ativo por vez.
+     *
+     * Mesma defesa da prospecção, por motivo mais direto: dois jobs de
+     * recuperação disputariam as mesmas empresas e gastariam chamadas pagas de
+     * IA em duplicidade sobre os mesmos registros. `total` vira
+     * `target_qualified` para a barra de progresso ter denominador.
+     */
+    async createAnalysisRecoveryUnique(input: {
+      idempotencyKey: string;
+      total: number;
+      maxAiCalls: number;
+      deadlineAt: string | null;
+    }): Promise<{ job: JobRow; alreadyRunning: boolean }> {
+      const active = await findActiveAnalysisRecovery();
+      if (active) return { job: active, alreadyRunning: true };
+
+      try {
+        const rows = await db.query<JobRow>(
+          // Começa direto em ANALYZE: não há busca nem deduplicação a fazer,
+          // as empresas já estão no banco.
+          `insert into job_queue
+               (job_type, idempotency_key, status, phase,
+                target_qualified, max_provider_calls, max_ai_calls, deadline_at, payload)
+             values ($1,$2,'queued','ANALYZE',$3,0,$4,$5,'{}'::jsonb)
+             on conflict (idempotency_key) do nothing
+             returning *`,
+          [
+            ANALYSIS_RECOVERY_JOB,
+            input.idempotencyKey,
+            input.total,
+            input.maxAiCalls,
+            input.deadlineAt,
+          ],
+        );
+        if (rows[0]) return { job: rows[0], alreadyRunning: false };
+        const existing = await db.query<JobRow>(
+          "select * from job_queue where idempotency_key = $1",
+          [input.idempotencyKey],
+        );
+        if (existing[0]) return { job: existing[0], alreadyRunning: true };
+        throw new Error("job de recuperação não pôde ser criado");
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        const winner = await findActiveAnalysisRecovery();
         if (!winner) throw error;
         return { job: winner, alreadyRunning: true };
       }
@@ -405,10 +521,16 @@ export function createJobsRepository(db: Db) {
      * Os dois estados têm gatilhos diferentes:
      *   - 'queued'  fica disponível em `run_after`;
      *   - 'running' só pode ser roubado quando o lock expira.
+     *
+     * Cobre TODOS os tipos executáveis por padrão. É o que sustenta a corrente
+     * para a recuperação de análises tanto quanto para a prospecção: se a
+     * consulta olhasse só `prospect_pipeline`, um job de recuperação sozinho na
+     * fila devolveria `null` e a corrente encerraria com trabalho pendente.
      */
     async msUntilNextRunnable(
-      jobType = "prospect_pipeline",
+      jobType: string | readonly string[] = RUNNABLE_JOB_TYPES,
     ): Promise<number | null> {
+      const tipos = Array.isArray(jobType) ? jobType : [jobType];
       const rows = await db.query<{ ms: number | null }>(
         `select extract(epoch from (min(next_at) - now())) * 1000 as ms
            from (
@@ -417,21 +539,30 @@ export function createJobsRepository(db: Db) {
                       else lock_expires_at
                     end as next_at
                from job_queue
-              where job_type = $1
+              where job_type = any($1)
                 and status in ('queued', 'running')
            ) t
           where next_at is not null`,
-        [jobType],
+        [tipos],
       );
       const ms = rows[0]?.ms;
       if (ms === null || ms === undefined) return null;
       return Math.max(0, Math.round(Number(ms)));
     },
 
+    /**
+     * Jobs ativos de QUALQUER tipo executável.
+     *
+     * Cobre a recuperação de análises além da prospecção: é o que decide se o
+     * polling da interface dispara um tick. Restrito a `prospect_pipeline`,
+     * uma recuperação em andamento não teria rede de segurança nenhuma — e o
+     * encadeamento sozinho não basta (medido em 22/07).
+     */
     async countActive(): Promise<number> {
       const rows = await db.query<{ c: number }>(
         `select count(*)::int as c from job_queue
-         where job_type = 'prospect_pipeline' and status in ('queued','running')`,
+         where job_type = any($1) and status in ('queued','running')`,
+        [RUNNABLE_JOB_TYPES],
       );
       return rows[0]?.c ?? 0;
     },

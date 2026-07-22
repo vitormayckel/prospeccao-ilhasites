@@ -18,6 +18,7 @@ import { createAuditRepository } from "@/server/repositories/audit-repository";
 import { createReportsRepository } from "@/server/repositories/reports-repository";
 import { createJobsRepository } from "@/server/repositories/jobs-repository";
 import { createJobRunner } from "@/server/services/job-runner";
+import { createAnalysisRecoveryRunner } from "@/server/services/analysis-recovery-runner";
 import { createReviewService } from "@/server/services/review-service";
 import { createPipelineService } from "@/server/services/pipeline-service";
 import { createCollectionService } from "@/server/services/collection-service";
@@ -87,6 +88,11 @@ export async function createServerContext(options?: {
     searchProfiles,
     analysis: analysisService,
   });
+  const analysisRecoveryRunner = createAnalysisRecoveryRunner({
+    jobs,
+    aiAnalyses,
+    analysis: analysisService,
+  });
 
   return {
     db,
@@ -118,6 +124,7 @@ export async function createServerContext(options?: {
       contact: contactService,
       health: healthService,
       jobRunner,
+      analysisRecoveryRunner,
     },
   };
 }
