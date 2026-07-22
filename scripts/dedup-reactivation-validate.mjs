@@ -829,10 +829,65 @@ await reset();
 }
 
 // =====================================================================
+// 12. Continuidade sem interface: o encadeamento sabe QUANDO voltar
+// =====================================================================
+section("12. msUntilNextRunnable sustenta a corrente sem a tela aberta");
+await reset();
+{
+  // (a) fila vazia → null → a corrente termina (nunca laço infinito)
+  const vazio = await jobsRepo.msUntilNextRunnable();
+  assert(vazio === null, "fila vazia devolve null (corrente encerra sozinha)");
+
+  // (b) job pronto agora → 0 → encadeia imediatamente
+  const job = await createJob(5);
+  const agora = await jobsRepo.msUntilNextRunnable();
+  assert(
+    agora === 0,
+    `job pronto devolve 0 (obtido: ${agora}) — encadeia sem esperar`,
+  );
+
+  // (c) job em BACKOFF após falha transitória → devolve a espera restante.
+  // Este era o buraco: um tick logo após a falha não reivindicava nada e a
+  // corrente morria achando que não havia mais trabalho.
+  await q(
+    "update job_queue set status='queued', run_after = now() + interval '12 seconds' where id=$1",
+    [job.id],
+  );
+  const backoff = await jobsRepo.msUntilNextRunnable();
+  assert(
+    backoff !== null && backoff > 9000 && backoff <= 13000,
+    `job em backoff devolve a espera restante (~12s, obtido: ${backoff}ms)`,
+  );
+
+  // (d) job em execução com lock válido → só volta quando o lock expira,
+  // e não é reivindicado por engano nesse meio-tempo.
+  await q(
+    `update job_queue set status='running', run_after = now(),
+            lock_expires_at = now() + interval '30 seconds', locked_by='w1'
+      where id=$1`,
+    [job.id],
+  );
+  const comLock = await jobsRepo.msUntilNextRunnable();
+  assert(
+    comLock !== null && comLock > 27000 && comLock <= 31000,
+    `job com lock válido só volta na expiração (~30s, obtido: ${comLock}ms)`,
+  );
+  const roubo = await jobsRepo.claimNext("w2");
+  assert(roubo === null, "outro worker NÃO rouba um job com lock válido");
+
+  // (e) job terminal → null de novo → a corrente para.
+  await q("update job_queue set status='completed' where id=$1", [job.id]);
+  assert(
+    (await jobsRepo.msUntilNextRunnable()) === null,
+    "job encerrado devolve null (corrente para)",
+  );
+}
+
+// =====================================================================
 console.log("");
 if (failures > 0) {
   console.error(`❌ ${failures} verificação(ões) falharam.`);
   process.exit(1);
 }
-console.log("✅ Correção da causa raiz validada (13 cenários).");
+console.log("✅ Correção da causa raiz validada (14 cenários).");
 await pg.close();

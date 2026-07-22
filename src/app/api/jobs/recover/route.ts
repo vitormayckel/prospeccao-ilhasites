@@ -43,12 +43,30 @@ async function handle(request: NextRequest) {
       await repositories.jobs.recoverAbandoned(ABANDONED_AFTER_MINUTES);
     const recoveredAnalyses = await services.analysis.recoverStaleAnalyses();
 
-    logInfo("job.recovery", { recoveredJobs, recoveredAnalyses });
+    // Retoma se houver QUALQUER trabalho reivindicável — não apenas o que
+    // acabou de ser recuperado.
+    //
+    // `recoverAbandoned` só mexe em jobs presos em 'running' com lock
+    // expirado. Um job em 'queued' cuja corrente de ticks se perdeu não era
+    // recuperado por ninguém e ficava parado indefinidamente. Era o último
+    // caminho pelo qual uma execução podia depender de alguém abrir a tela.
+    const pendente = await repositories.jobs.msUntilNextRunnable();
 
-    // Se algo voltou à fila, retoma imediatamente em vez de esperar 24h.
-    if (recoveredJobs > 0) scheduleNextTick("recovery");
+    logInfo("job.recovery", {
+      recoveredJobs,
+      recoveredAnalyses,
+      pendingInMs: pendente,
+      chaining: pendente !== null,
+    });
 
-    return NextResponse.json({ ok: true, recoveredJobs, recoveredAnalyses });
+    if (pendente !== null) await scheduleNextTick("recovery");
+
+    return NextResponse.json({
+      ok: true,
+      recoveredJobs,
+      recoveredAnalyses,
+      resumed: pendente !== null,
+    });
   } catch (error) {
     const logged = logAndSanitize("api.jobs.recover", error);
     return NextResponse.json(

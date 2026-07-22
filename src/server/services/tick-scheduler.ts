@@ -29,12 +29,27 @@ export function resolveSelfUrl(path: string): string | null {
 }
 
 /**
- * Dispara o próximo tick sem aguardar seu processamento.
+ * Dispara o próximo tick e devolve a promessa do DISPARO (não do
+ * processamento). A rota alvo responde 202 de imediato, então isto resolve
+ * rápido e as invocações não se aninham.
  *
- * A rota alvo responde 202 imediatamente, então este fetch resolve rápido e
- * as invocações NÃO se aninham: cada uma vive apenas o seu próprio tick.
+ * ---------------------------------------------------------------------
+ * Por que devolver a promessa — causa da execução que parava sozinha
+ *
+ * A versão anterior era `void` e se apoiava só em `waitUntil` daqui. Só que
+ * quem chama isto já roda DENTRO de um `waitUntil` (a rota responde 202 e
+ * processa o tick em segundo plano). Registrar um novo `waitUntil` de dentro
+ * de outro que já está drenando não é garantido: a invocação podia ser
+ * congelada antes de o fetch sair, e a corrente morria em silêncio. O
+ * sintoma era exatamente o observado — o job avançava enquanto a interface
+ * fazia polling e parava assim que a aba fechava.
+ *
+ * Devolvendo a promessa, o chamador a inclui no SEU `waitUntil`, que é o
+ * único registrado durante o ciclo de vida da requisição. O `waitUntil`
+ * local continua aqui como rede de segurança para quem chama sem aguardar
+ * (por exemplo, a Server Action de nudge).
  */
-export function scheduleNextTick(reason: string): void {
+export function scheduleNextTick(reason: string): Promise<void> {
   const secret = process.env.JOBS_TICK_SECRET;
   const url = resolveSelfUrl("/api/jobs/tick");
 
@@ -46,7 +61,7 @@ export function scheduleNextTick(reason: string): void {
       hasSecret: Boolean(secret),
       hasUrl: Boolean(url),
     });
-    return;
+    return Promise.resolve();
   }
 
   const dispatch = fetch(url, {
@@ -55,8 +70,8 @@ export function scheduleNextTick(reason: string): void {
     body: JSON.stringify({ reason }),
     cache: "no-store",
   })
-    .then(() => {
-      logInfo("job.schedule.dispatched", { reason });
+    .then((response) => {
+      logInfo("job.schedule.dispatched", { reason, status: response.status });
     })
     .catch((error) => {
       // Falha ao encadear não pode derrubar o tick atual — o progresso já
@@ -64,6 +79,7 @@ export function scheduleNextTick(reason: string): void {
       logAndSanitize("job.schedule", error, { reason });
     });
 
-  // waitUntil mantém a invocação viva apenas até o disparo ser entregue.
+  // Rede de segurança para chamadores que não aguardam a promessa.
   waitUntil(dispatch);
+  return dispatch;
 }

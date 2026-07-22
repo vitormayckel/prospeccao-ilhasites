@@ -36,23 +36,79 @@ function authorize(request: NextRequest): boolean {
   return false;
 }
 
-async function executeTick(): Promise<void> {
+/**
+ * Orçamento total da invocação. Fica abaixo de `maxDuration` (60s) com folga
+ * para encadear o próximo antes de a função ser encerrada.
+ */
+const INVOCATION_BUDGET_MS = 45_000;
+
+/** Espera máxima, dentro da invocação, por um job em backoff. */
+const MAX_BACKOFF_WAIT_MS = 20_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Drena o máximo de ticks que couber nesta invocação e, ao final, encadeia a
+ * próxima SE ainda houver trabalho.
+ *
+ * Antes era um tick por invocação. Uma execução de 16 minutos precisava de
+ * ~100 saltos de encadeamento, e bastava um falhar para o pipeline parar. Com
+ * o laço, a mesma execução usa ~20 saltos: menos oportunidades de quebrar e
+ * menos invocações cobradas.
+ */
+async function drainTicks(reason: string): Promise<void> {
+  const startedAt = Date.now();
+  const remaining = () => INVOCATION_BUDGET_MS - (Date.now() - startedAt);
+
   try {
-    const { services } = await createServerContext();
-    const result = await services.jobRunner.runTick({
-      budgetMs: DEFAULT_TICK_BUDGET_MS,
+    const { services, repositories } = await createServerContext();
+    let ticks = 0;
+
+    while (remaining() > DEFAULT_TICK_BUDGET_MS) {
+      const result = await services.jobRunner.runTick({
+        budgetMs: DEFAULT_TICK_BUDGET_MS,
+      });
+      ticks++;
+
+      logInfo("job.tick.done", {
+        picked: result.picked,
+        jobId: result.jobId ?? null,
+        phase: result.phase ?? null,
+        steps: result.steps,
+        hasMoreWork: result.hasMoreWork,
+      });
+
+      if (result.picked && result.hasMoreWork) continue;
+
+      // Nada reivindicável AGORA. Pode ser: (a) fila vazia — encerra; ou
+      // (b) job em backoff, ou preso por outro worker — nesse caso esperar
+      // um pouco aqui é o que mantém a corrente viva sem depender de mais
+      // um salto de rede.
+      const waitMs = await repositories.jobs.msUntilNextRunnable();
+      if (waitMs === null) break;
+      if (waitMs > MAX_BACKOFF_WAIT_MS || waitMs + DEFAULT_TICK_BUDGET_MS > remaining()) {
+        break; // não cabe nesta invocação: o encadeamento abaixo assume
+      }
+      await sleep(waitMs + 250);
+    }
+
+    // Encadeia apenas se sobrou trabalho. `null` = fila vazia, e a corrente
+    // termina naturalmente — nunca há laço infinito.
+    const pendente = await repositories.jobs.msUntilNextRunnable();
+    logInfo("job.tick.invocation", {
+      reason,
+      ticks,
+      durationMs: Date.now() - startedAt,
+      chaining: pendente !== null,
+      nextInMs: pendente,
     });
 
-    logInfo("job.tick.done", {
-      picked: result.picked,
-      jobId: result.jobId ?? null,
-      phase: result.phase ?? null,
-      steps: result.steps,
-      hasMoreWork: result.hasMoreWork,
-    });
-
-    // Encadeia somente enquanto houver trabalho — nunca em laço infinito.
-    if (result.hasMoreWork) scheduleNextTick("chain");
+    if (pendente !== null) {
+      // AGUARDADO de propósito: este await é o que garante que o disparo saia
+      // antes de a invocação ser congelada. Era exatamente aqui que a corrente
+      // morria quando a aba do navegador fechava.
+      await scheduleNextTick("chain");
+    }
   } catch (error) {
     // O tick já trata suas falhas internamente; isto cobre falha ao montar o
     // contexto (ex.: banco indisponível). Não relança: a rota não pode
@@ -70,12 +126,13 @@ export async function POST(request: NextRequest) {
   // Modo síncrono para Cron, testes e diagnóstico: devolve o resultado real.
   if (url.searchParams.get("sync") === "1") {
     try {
-      const { services } = await createServerContext();
+      const { services, repositories } = await createServerContext();
       const result = await services.jobRunner.runTick({
         budgetMs: DEFAULT_TICK_BUDGET_MS,
       });
-      if (result.hasMoreWork) scheduleNextTick("chain");
-      return NextResponse.json({ ok: true, ...result });
+      const pendente = await repositories.jobs.msUntilNextRunnable();
+      if (pendente !== null) await scheduleNextTick("chain");
+      return NextResponse.json({ ok: true, ...result, nextInMs: pendente });
     } catch (error) {
       const logged = logAndSanitize("api.jobs.tick.sync", error);
       return NextResponse.json(
@@ -85,7 +142,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  waitUntil(executeTick());
+  const body = await request.json().catch(() => ({}) as { reason?: string });
+  waitUntil(drainTicks(String(body?.reason ?? "chain")));
   return NextResponse.json({ accepted: true }, { status: 202 });
 }
 

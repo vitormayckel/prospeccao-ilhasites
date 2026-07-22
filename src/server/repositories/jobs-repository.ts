@@ -393,6 +393,41 @@ export function createJobsRepository(db: Db) {
       );
     },
 
+    /**
+     * Milissegundos até o próximo job ficar reivindicável, ou `null` se não há
+     * nenhum pendente. 0 significa "já está disponível agora".
+     *
+     * É o que permite ao encadeamento cobrir a janela de backoff. Um tick que
+     * roda logo após uma falha não consegue reivindicar nada (o `run_after`
+     * está no futuro) e antes disso concluía "não há mais trabalho",
+     * encerrando a corrente e deixando o job parado até alguém abrir a tela.
+     *
+     * Os dois estados têm gatilhos diferentes:
+     *   - 'queued'  fica disponível em `run_after`;
+     *   - 'running' só pode ser roubado quando o lock expira.
+     */
+    async msUntilNextRunnable(
+      jobType = "prospect_pipeline",
+    ): Promise<number | null> {
+      const rows = await db.query<{ ms: number | null }>(
+        `select extract(epoch from (min(next_at) - now())) * 1000 as ms
+           from (
+             select case
+                      when status = 'queued' then run_after
+                      else lock_expires_at
+                    end as next_at
+               from job_queue
+              where job_type = $1
+                and status in ('queued', 'running')
+           ) t
+          where next_at is not null`,
+        [jobType],
+      );
+      const ms = rows[0]?.ms;
+      if (ms === null || ms === undefined) return null;
+      return Math.max(0, Math.round(Number(ms)));
+    },
+
     async countActive(): Promise<number> {
       const rows = await db.query<{ c: number }>(
         `select count(*)::int as c from job_queue
