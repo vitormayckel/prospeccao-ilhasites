@@ -7,7 +7,10 @@ import { AnalyzePendingButton } from "@/features/opportunities/components/analyz
 import { UnavailableState } from "@/components/ui/unavailable-state";
 import { createServerContext } from "@/server/context";
 import { safeQuery } from "@/server/safe-query";
-import { opportunityFiltersSchema } from "@/lib/validation/company";
+import {
+  opportunityFiltersSchema,
+  OPPORTUNITY_SORTS,
+} from "@/lib/validation/company";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +34,13 @@ export default async function OpportunitiesPage({
     reviewStatus: validStatuses.includes(statusParam ?? "")
       ? statusParam
       : undefined,
-    sort: single(searchParams.sort) ?? "commercial",
+    // "score" saiu das opções; um link antigo cai no padrão comercial em vez
+    // de invalidar o parse inteiro e derrubar os demais filtros junto.
+    sort: OPPORTUNITY_SORTS.includes(
+      (single(searchParams.sort) ?? "") as (typeof OPPORTUNITY_SORTS)[number],
+    )
+      ? single(searchParams.sort)
+      : "commercial",
     order: single(searchParams.order) ?? "desc",
     page: single(searchParams.page) ?? 1,
     pageSize: 20,

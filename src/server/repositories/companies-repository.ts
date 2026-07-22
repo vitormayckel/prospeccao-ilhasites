@@ -67,7 +67,6 @@ const SORT_SQL: Record<OpportunityFilters["sort"], string> = {
   // é apenas desempate, não o critério único.
   commercial: `coalesce(c.commercial_score, -1), case c.website_class when 'none' then 4 when 'very_poor' then 3 when 'reasonable' then 2 when 'professional' then 1 else 0 end`,
   priority: PRIORITY_RANK,
-  score: "c.score",
   name: "c.normalized_name",
   created_at: "c.created_at",
 };

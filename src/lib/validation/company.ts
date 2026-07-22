@@ -44,11 +44,17 @@ export const createNoteInputSchema = z.object({
 });
 export type CreateNoteInput = z.infer<typeof createNoteInputSchema>;
 
-/** Filtros, ordenação e paginação da fila de oportunidades (Blueprint RF-17). */
+/**
+ * Filtros, ordenação e paginação da fila de oportunidades (Blueprint RF-17).
+ *
+ * "score" (a nota analítica do breakdown) saiu das opções: conviver com dois
+ * scores ordenáveis confundia a operação sem agregar. `commercial_score` é a
+ * métrica de decisão e é o único ranking oferecido — a nota analítica continua
+ * visível no detalhe da empresa.
+ */
 export const OPPORTUNITY_SORTS = [
   "commercial",
   "priority",
-  "score",
   "name",
   "created_at",
 ] as const;

@@ -587,8 +587,9 @@ export function createJobsRepository(db: Db) {
      * estavam exatamente assim.
      *
      * `analysis_failed` é o estado honesto: a análise não se completou. É o
-     * mesmo estado de uma análise que falhou, então o reprocessamento já
-     * existente as alcança sem nenhum caminho novo.
+     * mesmo estado de uma análise que falhou, e a recuperação em
+     * `listCompaniesPendingAnalysis` alcança os dois — sem isso este estado
+     * seria um beco sem saída, que era exatamente o caso até 22/07.
      */
     async sweepPendingAnalysis(jobId: string): Promise<number> {
       const rows = await db.query<{ id: string }>(

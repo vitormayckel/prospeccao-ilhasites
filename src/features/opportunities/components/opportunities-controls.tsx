@@ -2,7 +2,8 @@
 
 import { useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, ArrowDown, ArrowUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -21,10 +22,14 @@ const statusTabs = [
   { value: "rejected", label: "Rejeitadas" },
 ];
 
+/*
+ * "Score análise" saiu: dois scores ordenáveis confundiam a decisão diária.
+ * `commercial_score` é a métrica final e é o padrão — sempre do maior para o
+ * menor, com alternância explícita para crescente.
+ */
 const sortOptions = [
   { value: "commercial", label: "Score comercial" },
   { value: "priority", label: "Prioridade" },
-  { value: "score", label: "Score análise" },
   { value: "name", label: "Nome" },
   { value: "created_at", label: "Mais recentes" },
 ];
@@ -36,7 +41,10 @@ export function OpportunitiesControls() {
 
   const currentStatus = params.get("status") ?? "all";
   const currentSort = params.get("sort") ?? "commercial";
+  const currentOrder = params.get("order") === "asc" ? "asc" : "desc";
   const currentSearch = params.get("search") ?? "";
+  const sortLabel =
+    sortOptions.find((o) => o.value === currentSort)?.label ?? "Score comercial";
 
   const update = useCallback(
     (changes: Record<string, string | null>) => {
@@ -89,22 +97,40 @@ export function OpportunitiesControls() {
           />
         </form>
 
-        <div className="w-full sm:w-44">
-          <Select
-            value={currentSort}
-            onValueChange={(v) => update({ sort: v })}
+        <div className="flex items-center gap-1.5">
+          <div className="w-full sm:w-44">
+            <Select
+              value={currentSort}
+              // Trocar de critério sempre recomeça em decrescente: é o que o
+              // operador espera ao pedir "as melhores primeiro".
+              onValueChange={(v) => update({ sort: v, order: null })}
+            >
+              <SelectTrigger aria-label="Ordenar por" className="h-8 text-meta">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 shrink-0 px-2"
+            aria-label={`${sortLabel}: ${currentOrder === "desc" ? "maior para menor" : "menor para maior"}. Clique para inverter.`}
+            title={
+              currentOrder === "desc" ? "Maior para menor" : "Menor para maior"
+            }
+            onClick={() =>
+              update({ order: currentOrder === "desc" ? "asc" : null })
+            }
           >
-            <SelectTrigger aria-label="Ordenar por" className="h-8 text-meta">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {currentOrder === "desc" ? <ArrowDown /> : <ArrowUp />}
+          </Button>
         </div>
       </div>
     </div>

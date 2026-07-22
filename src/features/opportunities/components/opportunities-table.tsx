@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusDot } from "@/components/ui/status-dot";
 import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { RowActions } from "@/features/opportunities/components/row-actions";
+import { ScoreSortHeader } from "@/features/opportunities/components/score-sort-header";
 import {
   commercialPriorityVariant,
   reviewStatusLabel,
@@ -54,7 +55,9 @@ export function OpportunitiesTable({ rows }: { rows: CompanyListRow[] }) {
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>Empresa</TableHead>
-            <TableHead className="w-24">Score</TableHead>
+            <TableHead className="w-24">
+              <ScoreSortHeader />
+            </TableHead>
             <TableHead className="w-28">Prioridade</TableHead>
             <TableHead className="w-40">Estado</TableHead>
             <TableHead className="w-12" />

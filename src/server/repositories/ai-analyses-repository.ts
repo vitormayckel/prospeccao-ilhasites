@@ -119,11 +119,22 @@ export function createAiAnalysesRepository(db: Db) {
       return rows[0]?.c ?? 0;
     },
 
-    /** Empresas aguardando análise (RF-07). */
+    /**
+     * Empresas que ainda precisam de análise (RF-07).
+     *
+     * Inclui `analysis_failed`, não só `pending_analysis`. Uma empresa cuja
+     * análise falhou — por indisponibilidade da IA, por esgotar as tentativas
+     * ou por varredura de encerramento de job — não tinha nenhum caminho de
+     * volta: o contador ignorava esse estado, o botão de recuperação se
+     * escondia por ver zero pendentes, e o registro ficava permanentemente
+     * fora da fila de decisão. Falha de análise é transitória por natureza;
+     * o estado precisa ser reprocessável.
+     */
     async listCompaniesPendingAnalysis(limit: number): Promise<CompanyRow[]> {
       return db.query<CompanyRow>(
         `select * from companies
-         where review_status = 'pending_analysis' and deleted_at is null
+         where review_status in ('pending_analysis', 'analysis_failed')
+           and deleted_at is null
          order by created_at asc
          limit ${Number(limit)}`,
       );
@@ -132,7 +143,8 @@ export function createAiAnalysesRepository(db: Db) {
     async countPendingAnalysis(): Promise<number> {
       const rows = await db.query<{ c: number }>(
         `select count(*)::int as c from companies
-         where review_status = 'pending_analysis' and deleted_at is null`,
+         where review_status in ('pending_analysis', 'analysis_failed')
+           and deleted_at is null`,
       );
       return rows[0]?.c ?? 0;
     },

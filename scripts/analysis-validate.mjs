@@ -12,6 +12,19 @@ import { dirname, join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 
+import { createAiAnalysesRepository } from "@/server/repositories/ai-analyses-repository";
+import { normalizeRows } from "@/lib/database/sql";
+
+/** Adapta o PGlite ao contrato `Db` usado pelos repositories. */
+const adaptar = (client) => ({
+  async query(text, params = []) {
+    return normalizeRows((await client.query(text, params)).rows);
+  },
+  async transaction(fn) {
+    return client.transaction(async (txn) => fn(adaptar(txn)));
+  },
+});
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, "..", "supabase", "migrations");
 const seedPath = join(__dirname, "..", "supabase", "seed.sql");
@@ -114,7 +127,24 @@ const failRun = (
 await q("update ai_analyses set status='failed', error_message='timeout', completed_at=now() where id=$1", [failRun.id]);
 await q("update companies set review_status='analysis_failed' where id=$1", [company.id]);
 const failed = (await q("select review_status from companies where id=$1", [company.id]))[0];
-assert(failed.review_status === "analysis_failed", "falha após retries -> analysis_failed (reprocessável)");
+assert(failed.review_status === "analysis_failed", "falha após retries -> analysis_failed");
+
+// "Reprocessável" precisa ser verificado no CAMINHO REAL de recuperação, não
+// apenas no valor da coluna. Até 22/07 esta asserção passava enquanto
+// analysis_failed era, na prática, um beco sem saída: o contador e a listagem
+// só olhavam pending_analysis, o botão se escondia por ver zero pendentes e a
+// empresa nunca voltava para a fila.
+const repoIa = createAiAnalysesRepository(adaptar(db));
+const pendentes = await repoIa.listCompaniesPendingAnalysis(50);
+assert(
+  pendentes.some((c) => c.id === company.id),
+  "empresa em analysis_failed aparece na lista de reprocessamento",
+);
+const totalPendentes = await repoIa.countPendingAnalysis();
+assert(
+  totalPendentes >= 1,
+  `contador de pendentes enxerga analysis_failed (obtido: ${totalPendentes})`,
+);
 
 // custo/tokens são numéricos e não-nulos por padrão onde aplicável
 const costRow = (await q("select cost_estimate from ai_analyses where id=$1", [running.id]))[0];
