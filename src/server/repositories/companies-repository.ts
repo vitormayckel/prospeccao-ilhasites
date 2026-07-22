@@ -62,13 +62,33 @@ export interface CompanyDetail {
 
 const PRIORITY_RANK = `case c.priority when 'urgent' then 4 when 'high' then 3 when 'normal' then 2 else 1 end`;
 
-const SORT_SQL: Record<OpportunityFilters["sort"], string> = {
-  // Ordenação comercial: score comercial primeiro; a classe do site (A>B>C>D)
-  // é apenas desempate, não o critério único.
-  commercial: `coalesce(c.commercial_score, -1), case c.website_class when 'none' then 4 when 'very_poor' then 3 when 'reasonable' then 2 when 'professional' then 1 else 0 end`,
-  priority: PRIORITY_RANK,
-  name: "c.normalized_name",
-  created_at: "c.created_at",
+const WEBSITE_CLASS_RANK = `case c.website_class when 'none' then 4 when 'very_poor' then 3 when 'reasonable' then 2 when 'professional' then 1 else 0 end`;
+
+/**
+ * Cada critério devolve a cláusula ORDER BY COMPLETA, já com a direção
+ * aplicada a TODAS as suas expressões.
+ *
+ * Antes isto era um texto solto e a direção era concatenada uma única vez no
+ * fim. Para `commercial`, que tem duas expressões separadas por vírgula, o
+ * `desc`/`asc` caía só na segunda (o desempate por classe de site) e a
+ * primeira — o score — ficava implicitamente ASC para sempre. Clicar na seta
+ * trocava a URL e o ícone, mas a lista praticamente não mudava.
+ *
+ * `nulls last` explícito em vez de `coalesce(..., -1)`: o coalesce só põe os
+ * nulos no fim quando a ordem é decrescente; em crescente eles vinham
+ * primeiro. Com `nulls last` empresas sem score ficam no fim nos dois
+ * sentidos.
+ */
+const SORT_SQL: Record<
+  OpportunityFilters["sort"],
+  (direcao: "asc" | "desc") => string
+> = {
+  // Score comercial é o critério; a classe do site (A>B>C>D) só desempata.
+  commercial: (d) =>
+    `c.commercial_score ${d} nulls last, ${WEBSITE_CLASS_RANK} ${d}`,
+  priority: (d) => `${PRIORITY_RANK} ${d}`,
+  name: (d) => `c.normalized_name ${d} nulls last`,
+  created_at: (d) => `c.created_at ${d}`,
 };
 
 /** Acesso a `companies` e agregados relacionados. */
@@ -110,7 +130,11 @@ export function createCompaniesRepository(db: Db) {
       }
 
       const whereSql = where.join(" and ");
-      const orderSql = `${SORT_SQL[filters.sort]} ${filters.order === "asc" ? "asc" : "desc"} nulls last, c.created_at desc`;
+      const direcao = filters.order === "asc" ? "asc" : "desc";
+      // `c.id` fecha a ordenação: sem um critério único no fim, duas empresas
+      // com o mesmo score e o mesmo created_at podem trocar de posição entre
+      // páginas e repetir ou sumir da paginação.
+      const orderSql = `${SORT_SQL[filters.sort](direcao)}, c.created_at desc, c.id desc`;
 
       const totalRows = await db.query<{ total: number }>(
         `select count(*)::int as total from companies c where ${whereSql}`,

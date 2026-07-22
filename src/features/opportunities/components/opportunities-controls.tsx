@@ -55,6 +55,9 @@ export function OpportunitiesControls() {
       }
       next.delete("page"); // qualquer mudança volta para a primeira página
       router.push(`${pathname}?${next.toString()}`);
+      // Mesma razão do cabeçalho da coluna Score: alternar a direção para uma
+      // URL já visitada pode servir do Router Cache sem reordenar.
+      router.refresh();
     },
     [params, pathname, router],
   );

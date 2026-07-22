@@ -27,6 +27,10 @@ export function ScoreSortHeader() {
     else next.delete("order");
     next.delete("page");
     router.push(`${pathname}?${next.toString()}`);
+    // O Router Cache pode devolver o payload já visto para uma URL repetida
+    // (alternar desc → asc → desc em poucos segundos). O refresh garante que a
+    // lista reordene na hora, sem recarregar a página na mão.
+    router.refresh();
   }
 
   return (
