@@ -325,6 +325,19 @@ export function createJobRunner(deps: {
       errorCode: input.reason,
       errorMessage: input.userMessage,
     });
+    await sweepPendingAnalysis(job);
+  }
+
+  /**
+   * Nenhuma empresa pode continuar "Aguardando análise" depois que o job
+   * terminou — não há mais quem a analise. Roda em TODO encerramento, feliz
+   * ou não.
+   */
+  async function sweepPendingAnalysis(job: JobRow): Promise<void> {
+    const swept = await jobs.sweepPendingAnalysis(job.id);
+    if (swept > 0) {
+      logInfo("job.sweepPendingAnalysis", { jobId: job.id, swept });
+    }
   }
 
   /**
@@ -958,6 +971,7 @@ export function createJobRunner(deps: {
       status:
         counts.qualified >= job.target_qualified ? "completed" : "partial",
     });
+    await sweepPendingAnalysis(job);
 
     logInfo("job.finished", {
       jobId: job.id,

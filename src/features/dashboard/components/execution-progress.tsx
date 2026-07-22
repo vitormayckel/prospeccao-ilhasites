@@ -9,9 +9,14 @@ import type { JobRow, JobPhase } from "@/types/domain";
 // =====================================================================
 // Progresso da execução em tempo quase real.
 //
-// Lê o estado PERSISTIDO do job. Nada aqui mantém o pipeline vivo: fechar a
-// aba não interrompe nada, e reabrir mostra exatamente onde o processamento
-// está. O componente é uma janela para o banco, não o motor.
+// Lê o estado PERSISTIDO do job — o componente é uma janela para o banco.
+//
+// Ressalva medida em produção (22/07): o `nudgeJobsAction` deste polling NÃO
+// é apenas rede de segurança. Sem ele o encadeamento de ticks morre quando a
+// invocação é congelada, e o job fica parado (dois travamentos, de 3min54s e
+// 8min29s, ambos encerrados no instante em que a aba foi reaberta). Enquanto
+// não houver um Cron por minuto chamando /api/jobs/tick, manter esta aba
+// aberta é o que conclui a execução.
 //
 // Polling moderado (5s) e apenas enquanto o job está ativo — encerrado, o
 // polling para e o banco deixa de ser consultado.
@@ -58,6 +63,25 @@ const FINISH_REASON: Record<string, string> = {
   erro_permanente:
     "A execução parou em um erro que não se resolve sozinho. Repetir daria o mesmo resultado, então nenhuma nova tentativa foi feita.",
 };
+
+/** Hora local (São Paulo) no formato HH:MM:SS. */
+function hora(iso: string): string {
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour12: false,
+  });
+}
+
+/** Duração compacta: 4min25s, 1h02min, 12s. */
+function duracao(inicio: string, fim: string): string {
+  const total = Math.max(0, Math.round((+new Date(fim) - +new Date(inicio)) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}min`;
+  if (m > 0) return `${m}min${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
 
 function Metric({
   label,
@@ -147,16 +171,33 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
               {STATUS_LABEL[job.status] ?? job.status}
             </span>
           </div>
-          <p className="mt-1 text-micro text-text-muted">
-            {job.started_at
-              ? `Iniciada em ${new Date(job.started_at).toLocaleString(
-                  "pt-BR",
-                  {
-                    timeZone: "America/Sao_Paulo",
-                  },
-                )}`
-              : "Aguardando início"}
-          </p>
+          {job.started_at ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-micro text-text-muted">
+              <span>
+                Início:{" "}
+                <span className="tnum text-text-secondary">
+                  {hora(job.started_at)}
+                </span>
+              </span>
+              <span>
+                Término:{" "}
+                <span className="tnum text-text-secondary">
+                  {job.finished_at ? hora(job.finished_at) : "—"}
+                </span>
+              </span>
+              <span>
+                Duração:{" "}
+                <span className="tnum text-text-secondary">
+                  {duracao(
+                    job.started_at,
+                    job.finished_at ?? updatedAt.toISOString(),
+                  )}
+                </span>
+              </span>
+            </div>
+          ) : (
+            <p className="mt-1 text-micro text-text-muted">Aguardando início</p>
+          )}
         </div>
 
         <div className="text-right">
@@ -300,12 +341,12 @@ export function ExecutionProgress({ initialJob }: { initialJob: JobRow }) {
         </div>
       ) : null}
 
+      {/* O progresso é lido do banco; manter esta aba aberta é o que hoje
+          garante o encadeamento dos ticks até existir um Cron por minuto. */}
       <p className="mt-3.5 text-micro text-text-muted">
         {isActive
-          ? `Atualizado às ${updatedAt.toLocaleTimeString("pt-BR")} · o processamento continua no servidor mesmo com esta aba fechada`
-          : job.finished_at
-            ? `Encerrada em ${new Date(job.finished_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
-            : null}
+          ? `Atualizado às ${updatedAt.toLocaleTimeString("pt-BR")} · mantenha esta aba aberta até a execução concluir`
+          : null}
       </p>
     </section>
   );

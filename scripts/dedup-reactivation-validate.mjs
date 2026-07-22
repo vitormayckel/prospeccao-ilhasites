@@ -884,10 +884,71 @@ await reset();
 }
 
 // =====================================================================
+// 13. Nenhuma empresa fica "Aguardando análise" após o job encerrar
+// =====================================================================
+section("13. Encerramento não deixa empresa aguardando análise");
+await reset();
+{
+  providerScript.pages = [
+    { results: [place("PLACE_SWEEP_1")], estimatedCost: 0, nextPageToken: null },
+    { results: [place("PLACE_SWEEP_2")], estimatedCost: 0, nextPageToken: null },
+  ];
+  const job = await createJob(1, 2);
+  await drain(buildRunner());
+
+  const [final] = await q("select status from job_queue where id=$1", [job.id]);
+  assert(final.status === "completed", "job encerrou");
+
+  // O invariante: terminado o job, ninguém mais vai analisar. Nenhuma empresa
+  // dele pode continuar em pending_analysis — era assim que 8 empresas de
+  // 21/07 ficaram presas em "Aguardando análise" para sempre.
+  const [presas] = await q(
+    `select count(*)::int as n
+       from job_candidates jc
+       join companies c on c.id = jc.company_id
+      where jc.job_id = $1 and jc.stage = 'new'
+        and c.deleted_at is null
+        and c.review_status = 'pending_analysis'`,
+    [job.id],
+  );
+  assert(
+    presas.n === 0,
+    `nenhuma empresa do job ficou em pending_analysis (obtido: ${presas.n})`,
+  );
+
+  // A varredura é idempotente: repetir não altera mais nada.
+  const repetida = await jobsRepo.sweepPendingAnalysis(job.id);
+  assert(repetida === 0, "varredura repetida não altera mais nada");
+
+  // E um job que FALHA também não pode deixar empresa pendurada.
+  await reset();
+  providerScript.pages = [
+    { results: [place("PLACE_SWEEP_3")], estimatedCost: 0, nextPageToken: null },
+  ];
+  const job2 = await createJob(5, 1);
+  await drain(buildRunner());
+  await q(
+    "update companies set review_status='pending_analysis' where deleted_at is null",
+  );
+  const varridas = await jobsRepo.sweepPendingAnalysis(job2.id);
+  assert(
+    varridas > 0,
+    `varredura alcança empresas do job encerrado (obtido: ${varridas})`,
+  );
+  const [restam] = await q(
+    `select count(*)::int as n from companies c
+      join job_candidates jc on jc.company_id = c.id and jc.job_id = $1
+     where c.review_status = 'pending_analysis' and c.deleted_at is null`,
+    [job2.id],
+  );
+  assert(restam.n === 0, "nenhuma sobra após a varredura");
+}
+
+// =====================================================================
 console.log("");
 if (failures > 0) {
   console.error(`❌ ${failures} verificação(ões) falharam.`);
   process.exit(1);
 }
-console.log("✅ Correção da causa raiz validada (14 cenários).");
+console.log("✅ Correção da causa raiz validada (15 cenários).");
 await pg.close();

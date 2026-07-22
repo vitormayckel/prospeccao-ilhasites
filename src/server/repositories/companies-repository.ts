@@ -29,7 +29,12 @@ import type { OpportunityFilters } from "@/lib/validation/company";
  *  stale          — análise presa há mais de 10 min (tick morto)
  *  retry_pending  — última tentativa falhou; será reprocessada
  */
-export type AnalysisState = "awaiting" | "running" | "stale" | "retry_pending";
+export type AnalysisState =
+  | "awaiting"
+  | "running"
+  | "stale"
+  | "retry_pending"
+  | "desynced";
 
 export interface CompanyListRow extends CompanyRow {
   analysis_state: AnalysisState | null;
@@ -128,6 +133,11 @@ export function createCompaniesRepository(db: Db) {
                        < now() - interval '10 minutes' then 'stale'
               when a.status = 'running' then 'running'
               when a.status = 'failed' then 'retry_pending'
+              -- Análise concluída com a empresa ainda em pending_analysis é
+              -- dessincronia entre ai_analyses e companies: a linha existe e
+              -- tem score, mas a fila mostrava "Aguardando análise" para
+              -- sempre porque este caso caía no ramo final.
+              when a.status = 'completed' then 'desynced'
               else 'awaiting'
             end as analysis_state
          from companies c

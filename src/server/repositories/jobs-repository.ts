@@ -578,6 +578,34 @@ export function createJobsRepository(db: Db) {
     },
 
     /**
+     * Resolve as empresas deste job que o encerramento deixou sem análise.
+     *
+     * `pending_analysis` significa "a IA ainda vai olhar". Quando o job chega
+     * a um estado terminal isso deixa de ser verdade: ninguém mais vai
+     * analisá-las, e elas ficavam para sempre em "Aguardando análise" na fila
+     * de decisão. Oito empresas coletadas em 21/07 por runs cancelados/falhos
+     * estavam exatamente assim.
+     *
+     * `analysis_failed` é o estado honesto: a análise não se completou. É o
+     * mesmo estado de uma análise que falhou, então o reprocessamento já
+     * existente as alcança sem nenhum caminho novo.
+     */
+    async sweepPendingAnalysis(jobId: string): Promise<number> {
+      const rows = await db.query<{ id: string }>(
+        `update companies c set
+           review_status = 'analysis_failed', updated_at = now()
+         from job_candidates jc
+         where jc.job_id = $1 and jc.stage = 'new'
+           and c.id = jc.company_id
+           and c.deleted_at is null
+           and c.review_status = 'pending_analysis'
+         returning c.id`,
+        [jobId],
+      );
+      return rows.length;
+    },
+
+    /**
      * Apuração de qualificadas para este job.
      *
      * "Qualificada" = empresa NOVA cuja análise concluiu (o critério de score

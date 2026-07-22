@@ -63,6 +63,7 @@ export const analysisStateLabel: Record<AnalysisState, string> = {
   running: "Em análise",
   stale: "Análise expirada",
   retry_pending: "Aguardando nova tentativa",
+  desynced: "Análise concluída (revisar)",
 };
 
 export const analysisStateTone: Record<AnalysisState, StatusTone> = {
@@ -70,6 +71,7 @@ export const analysisStateTone: Record<AnalysisState, StatusTone> = {
   running: "info",
   stale: "warning",
   retry_pending: "warning",
+  desynced: "warning",
 };
 
 export const reviewStatusLabel: Record<ReviewStatus, string> = {

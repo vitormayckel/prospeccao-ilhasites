@@ -25,8 +25,11 @@ const MAX_TARGET_QUALIFIED = 100;
  * tick. Busca e análise passam a ser um fluxo único: não é mais necessário
  * clicar em "Analisar pendentes".
  *
- * O processamento continua no servidor mesmo que o usuário atualize a página,
- * feche a aba ou o navegador.
+ * O progresso é persistido a cada passo, então atualizar a página não perde
+ * nada. Fechar a aba, porém, ainda interrompe o AVANÇO: medido em produção em
+ * 22/07, o encadeamento de ticks morre quando a invocação é congelada e o job
+ * fica parado até alguém reabrir a tela. Enquanto não houver um Cron por
+ * minuto chamando /api/jobs/tick, a aba precisa continuar aberta.
  */
 export async function startProspectJobAction(
   profileId: string,
