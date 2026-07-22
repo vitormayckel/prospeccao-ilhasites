@@ -91,6 +91,32 @@ const SORT_SQL: Record<
   created_at: (d) => `c.created_at ${d}`,
 };
 
+/**
+ * Garante que `commercial_factors` chegue à interface como ARRAY, qualquer que
+ * seja a forma gravada.
+ *
+ * O tipo do domínio promete `CommercialFactor[]`, mas o banco é jsonb e aceita
+ * qualquer forma. Linhas gravadas antes da correção do cast guardam um escalar
+ * string com o array serializado dentro, e um `.map` nelas derruba a página
+ * inteira. Nenhum campo opcional pode ter esse poder: aqui a leitura reconcilia
+ * a forma, e o que não for reconhecível vira lista vazia.
+ */
+function normalizarEmpresa<T extends { commercial_factors?: unknown }>(
+  row: T,
+): T {
+  const bruto = row.commercial_factors;
+  if (Array.isArray(bruto)) return row;
+  if (typeof bruto === "string") {
+    try {
+      const parsed: unknown = JSON.parse(bruto);
+      return { ...row, commercial_factors: Array.isArray(parsed) ? parsed : [] };
+    } catch {
+      return { ...row, commercial_factors: [] };
+    }
+  }
+  return { ...row, commercial_factors: [] };
+}
+
 /** Acesso a `companies` e agregados relacionados. */
 export function createCompaniesRepository(db: Db) {
   async function findById(id: string): Promise<CompanyRow | null> {
@@ -98,7 +124,7 @@ export function createCompaniesRepository(db: Db) {
       "select * from companies where id = $1 and deleted_at is null",
       [id],
     );
-    return rows[0] ?? null;
+    return rows[0] ? normalizarEmpresa(rows[0]) : null;
   }
 
   return {
@@ -178,7 +204,7 @@ export function createCompaniesRepository(db: Db) {
       );
 
       return {
-        rows,
+        rows: rows.map(normalizarEmpresa),
         total,
         page: filters.page,
         pageSize: filters.pageSize,
@@ -301,7 +327,13 @@ export function createCompaniesRepository(db: Db) {
         `update companies set
            website_class = $1,
            commercial_score = $2,
-           commercial_factors = $3::jsonb,
+           -- Cast em DOIS passos, text e depois jsonb. Com o cast direto para
+           -- jsonb o postgres.js infere o tipo pelo cast e serializa o
+           -- parâmetro MAIS UMA VEZ; como aqui já vem uma string JSON, o que
+           -- ficava gravado era um ESCALAR string em vez de um array, e o
+           -- detalhe da empresa quebrava ao chamar .map nele. Forçando text
+           -- primeiro, o driver envia a string crua e o Postgres a interpreta.
+           commercial_factors = $3::text::jsonb,
            commercial_scored_at = now(),
            commercial_scored_by = $4,
            updated_at = now()

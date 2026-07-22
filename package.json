@@ -20,13 +20,14 @@
     "municipios:generate": "node scripts/generate-municipios.mjs",
     "municipios:validate": "node scripts/municipios-validate.mjs",
     "backfill:uf": "node scripts/backfill-uf.mjs",
-    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs && node scripts/pipeline-validate.mjs && node scripts/jobs-validate.mjs && node scripts/municipios-validate.mjs && node scripts/dedup-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/dedup-reactivation-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/analysis-recovery-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunities-sort-validate.mjs",
+    "validate:all": "node scripts/generate-seed.mjs && node scripts/db-validate.mjs && node scripts/collection-validate.mjs && node scripts/analysis-validate.mjs && node scripts/messaging-validate.mjs && node scripts/pipeline-validate.mjs && node scripts/jobs-validate.mjs && node scripts/municipios-validate.mjs && node scripts/dedup-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/dedup-reactivation-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/analysis-recovery-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunities-sort-validate.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunity-detail-validate.mjs",
     "dedup:validate": "node scripts/dedup-validate.mjs",
     "dedup:reactivation:validate": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/dedup-reactivation-validate.mjs",
     "prospect:rehearsal": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/prospect-rehearsal-meta5.mjs",
     "backfill:unmerge": "node scripts/backfill-unmerge-social.mjs",
     "analysis:recovery:validate": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/analysis-recovery-validate.mjs",
-    "opportunities:sort:validate": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunities-sort-validate.mjs"
+    "opportunities:sort:validate": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunities-sort-validate.mjs",
+    "opportunity:detail:validate": "node scripts/generate-seed.mjs && node --conditions=react-server --import ./scripts/ts-alias-loader.mjs scripts/opportunity-detail-validate.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",

@@ -171,13 +171,20 @@ export default async function OpportunityDetailPage({
                   title={
                     analysisFailed
                       ? "Falha na análise"
-                      : "Sem análise concluída"
+                      : company.commercial_scored_by === "prefilter"
+                        ? "Classificada pelo pré-filtro"
+                        : "Sem análise concluída"
                   }
                   description={
                     analysisFailed
                       ? (lastAnalysis?.error_message ??
                         "A análise falhou. Você pode reprocessar.")
-                      : "Esta empresa ainda não possui uma análise de IA concluída."
+                      : company.commercial_scored_by === "prefilter"
+                        ? // Sem site próprio a classificação sai por regra, sem
+                          // chamar a IA. É economia deliberada, não ausência de
+                          // dado: o score comercial ao lado é válido.
+                          "Sem site próprio: classificada por regra, sem consumir análise de IA. O score comercial ao lado é válido."
+                        : "Esta empresa ainda não possui uma análise de IA concluída."
                   }
                 />
               )}
