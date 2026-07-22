@@ -22,7 +22,6 @@ Copie `.env.example` para `.env.local` e preencha conforme o uso:
 
 | Variável | Função |
 |---|---|
-| `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` | Trava de acesso (Basic Auth). Se ausentes, sem trava (dev). |
 | `DATABASE_URL` | Postgres de produção (postgres.js). Ausente → PGlite local. |
 | `GOOGLE_PLACES_API_KEY` | Habilita a coleta real (Places API New). Ausente → provider `fixture`. |
 | `GOOGLE_PLACES_COST_PER_REQUEST` | Custo estimado por requisição (US$). |
@@ -70,9 +69,8 @@ npm run validate:all   # 5 suítes contra Postgres real (PGlite):
 1. Provisione um Postgres (Supabase, Neon, etc.) e defina `DATABASE_URL`.
 2. Aplique as migrations de `supabase/migrations/` (e, se quiser dados de
    exemplo, `supabase/seed.sql`).
-3. Configure as variáveis de ambiente na Vercel (incluindo
-   `BASIC_AUTH_USER`/`BASIC_AUTH_PASSWORD` para travar o acesso externo).
-4. Deploy. O middleware bloqueia todo acesso sem as credenciais.
+3. Configure as variáveis de ambiente na Vercel.
+4. Deploy.
 
 ## Segurança
 

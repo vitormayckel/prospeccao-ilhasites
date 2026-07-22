@@ -105,9 +105,6 @@ Interface (fila de Oportunidades → decisão humana)
 ### Next.js
 
 - App Router; rotas dinâmicas server-rendered.
-- **Trava de acesso** (`src/middleware.ts`): HTTP Basic Auth contra
-  `BASIC_AUTH_USER` / `BASIC_AUTH_PASSWORD` (portão único para uso interno;
-  sem credenciais definidas ⇒ sem trava em dev).
 
 ---
 
@@ -116,8 +113,6 @@ Interface (fila de Oportunidades → decisão humana)
 > Apenas os **nomes**. Valores nunca são versionados nem exibidos; ficam em
 > `.env.local` (não commitado) e no painel da Vercel.
 
-- `BASIC_AUTH_USER`
-- `BASIC_AUTH_PASSWORD`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
