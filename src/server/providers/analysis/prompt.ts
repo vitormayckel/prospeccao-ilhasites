@@ -19,6 +19,14 @@ COMPOSIÇÃO DO SCORE (peso máximo por dimensão, total 100):
 FAIXAS: 80–100 muito alto; 65–79 alto; 45–64 médio; 25–44 baixo; 0–24 muito baixo.
 RECOMENDAÇÃO: "prioritize" (>=65), "review" (45–64), "low_priority" (<45).
 
+CLASSIFICAÇÃO DO WEBSITE (a empresa do snapshot SEMPRE possui domínio próprio — ausência de site é tratada fora da IA). Avalie o site com base nos dados disponíveis e atribua "website_assessment.class":
+- "very_poor": site muito ruim (ex.: sem HTTPS, não responsivo, visual antigo, navegação pobre, sem CTA).
+- "reasonable": site funcional porém limitado.
+- "professional": site profissional (domínio próprio, HTTPS, responsivo, boa navegação e identidade visual, páginas institucionais e formulário/CTA).
+Liste em "website_assessment.reasons" os motivos objetivos da classe.
+
+SCORE COMERCIAL ("commercial_score", 0–100): potencial de VENDER um site para esta empresa, considerando os sinais da PRÓPRIA empresa — qualidade do site atual (pior site = maior potencial), volume de avaliações, nota no Google, presença de WhatsApp, atividade em redes sociais, categoria do negócio e completude do cadastro. NÃO considere competitividade de mercado aqui (ela é somada fora da IA). Explique o score em "commercial_factors": um item por sinal, com "code" (curto, ex.: "site_quality", "reviews", "whatsapp"), "label" legível e "effect" ("+", "-" ou "=").
+
 REGRAS DE SEGURANÇA (obrigatórias):
 - Use SOMENTE os dados do snapshot. Não invente nem infira faturamento, porte, intenção de compra ou capacidade financeira.
 - Não afirme que um telefone tem WhatsApp só por ser celular; use "provável".
@@ -59,6 +67,30 @@ export const ANALYSIS_TOOL_SCHEMA = {
       enum: ["very_high", "high", "medium", "low", "very_low"],
     },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
+    commercial_score: { type: "integer", minimum: 0, maximum: 100 },
+    website_assessment: {
+      type: "object",
+      properties: {
+        class: {
+          type: "string",
+          enum: ["very_poor", "reasonable", "professional"],
+        },
+        reasons: { type: "array", items: { type: "string" } },
+      },
+      required: ["class", "reasons"],
+    },
+    commercial_factors: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          code: { type: "string" },
+          label: { type: "string" },
+          effect: { type: "string", enum: ["+", "-", "="] },
+        },
+        required: ["code", "label", "effect"],
+      },
+    },
     executive_summary: { type: "string" },
     score_breakdown: {
       type: "array",
@@ -93,6 +125,9 @@ export const ANALYSIS_TOOL_SCHEMA = {
     "score",
     "potential",
     "confidence",
+    "commercial_score",
+    "website_assessment",
+    "commercial_factors",
     "executive_summary",
     "score_breakdown",
     "positives",

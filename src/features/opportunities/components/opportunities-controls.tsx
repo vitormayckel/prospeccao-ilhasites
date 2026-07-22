@@ -22,8 +22,9 @@ const statusTabs = [
 ];
 
 const sortOptions = [
+  { value: "commercial", label: "Score comercial" },
   { value: "priority", label: "Prioridade" },
-  { value: "score", label: "Score" },
+  { value: "score", label: "Score análise" },
   { value: "name", label: "Nome" },
   { value: "created_at", label: "Mais recentes" },
 ];
@@ -34,7 +35,7 @@ export function OpportunitiesControls() {
   const params = useSearchParams();
 
   const currentStatus = params.get("status") ?? "all";
-  const currentSort = params.get("sort") ?? "priority";
+  const currentSort = params.get("sort") ?? "commercial";
   const currentSearch = params.get("search") ?? "";
 
   const update = useCallback(

@@ -20,6 +20,18 @@ export const prospectAnalysisSchema: z.ZodType<ProspectAnalysis> = z.object({
   score: z.number().int().min(0).max(100),
   potential: z.enum(AI_POTENTIAL),
   confidence: z.enum(AI_CONFIDENCE),
+  commercial_score: z.number().int().min(0).max(100),
+  website_assessment: z.object({
+    class: z.enum(["very_poor", "reasonable", "professional"]),
+    reasons: z.array(z.string()),
+  }),
+  commercial_factors: z.array(
+    z.object({
+      code: z.string().min(1),
+      label: z.string().min(1),
+      effect: z.enum(["+", "-", "="]),
+    }),
+  ),
   executive_summary: z.string().min(1),
   score_breakdown: z.array(
     z.object({

@@ -16,6 +16,9 @@ import type {
   ApproachChannel,
   ContactRole,
   NextActionStatus,
+  WebsiteClass,
+  CommercialFactor,
+  CommercialScoredBy,
 } from "@/types/domain";
 import type { OpportunityFilters } from "@/lib/validation/company";
 
@@ -55,6 +58,9 @@ export interface CompanyDetail {
 const PRIORITY_RANK = `case c.priority when 'urgent' then 4 when 'high' then 3 when 'normal' then 2 else 1 end`;
 
 const SORT_SQL: Record<OpportunityFilters["sort"], string> = {
+  // Ordenação comercial: score comercial primeiro; a classe do site (A>B>C>D)
+  // é apenas desempate, não o critério único.
+  commercial: `coalesce(c.commercial_score, -1), case c.website_class when 'none' then 4 when 'very_poor' then 3 when 'reasonable' then 2 when 'professional' then 1 else 0 end`,
   priority: PRIORITY_RANK,
   score: "c.score",
   name: "c.normalized_name",
@@ -242,6 +248,67 @@ export function createCompaniesRepository(db: Db) {
         params,
       );
       return rows[0]!;
+    },
+
+    /**
+     * Persiste a classificação comercial (migration 0011). Chamado tanto pelo
+     * pré-filtro determinístico (`by='prefilter'`) quanto após a IA
+     * (`by='ai'`). Não toca em `score` (o score analítico da IA é à parte).
+     */
+    async setCommercialClassification(
+      id: string,
+      values: {
+        websiteClass: WebsiteClass;
+        commercialScore: number;
+        factors: CommercialFactor[];
+        by: CommercialScoredBy;
+      },
+    ): Promise<CompanyRow> {
+      const rows = await db.query<CompanyRow>(
+        `update companies set
+           website_class = $1,
+           commercial_score = $2,
+           commercial_factors = $3::jsonb,
+           commercial_scored_at = now(),
+           commercial_scored_by = $4,
+           updated_at = now()
+         where id = $5
+         returning *`,
+        [
+          values.websiteClass,
+          values.commercialScore,
+          JSON.stringify(values.factors),
+          values.by,
+          id,
+        ],
+      );
+      return rows[0]!;
+    },
+
+    /**
+     * Competitividade do mercado local: quantos concorrentes do mesmo mercado
+     * (cidade × categoria) já têm domínio próprio. Leitura pura; a própria
+     * empresa é excluída. Sem cidade/categoria, retorna amostra vazia.
+     */
+    async getMarketCompetitiveness(
+      city: string | null,
+      category: string | null,
+      excludeId?: string,
+    ): Promise<{ total: number; withSite: number }> {
+      if (!city || !category) return { total: 0, withSite: 0 };
+      const rows = await db.query<{ total: number; with_site: number }>(
+        `select
+           count(*)::int as total,
+           count(*) filter (where normalized_domain is not null)::int as with_site
+         from companies
+         where deleted_at is null
+           and lower(city) = lower($1)
+           and primary_category = $2
+           and ($3::uuid is null or id <> $3::uuid)`,
+        [city, category, excludeId ?? null],
+      );
+      const r = rows[0] ?? { total: 0, with_site: 0 };
+      return { total: r.total, withSite: r.with_site };
     },
 
     async setContactStage(

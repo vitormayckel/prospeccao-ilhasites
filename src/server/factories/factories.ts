@@ -52,6 +52,14 @@ export function makeAnalysisOutput(
     score,
     potential: "high",
     confidence: "medium",
+    commercial_score: score,
+    website_assessment: {
+      class: "reasonable",
+      reasons: ["Classificação de teste."],
+    },
+    commercial_factors: [
+      { code: "site_quality", label: "Site razoável (teste)", effect: "=" },
+    ],
     executive_summary: "Resumo executivo de teste.",
     score_breakdown: [
       {

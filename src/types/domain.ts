@@ -52,6 +52,43 @@ export type PipelineStage = (typeof PIPELINE_STAGE)[number];
 export const PRIORITY = ["low", "normal", "high", "urgent"] as const;
 export type Priority = (typeof PRIORITY)[number];
 
+// Classificação do website e prioridade comercial (migration 0011) --------
+export const WEBSITE_CLASS = [
+  "none", // sem domínio próprio (sem site ou só rede social) → Prioridade A
+  "very_poor", // site muito ruim → Prioridade B
+  "reasonable", // site razoável → Prioridade C
+  "professional", // site profissional → Prioridade D
+] as const;
+export type WebsiteClass = (typeof WEBSITE_CLASS)[number];
+
+/** Prioridade comercial exibida (A alta urgência → D baixa). Derivada da classe. */
+export const COMMERCIAL_PRIORITY = ["A", "B", "C", "D"] as const;
+export type CommercialPriority = (typeof COMMERCIAL_PRIORITY)[number];
+
+/** Mapa puro classe→prioridade. Única fonte de verdade da derivação. */
+export const WEBSITE_CLASS_TO_PRIORITY: Record<WebsiteClass, CommercialPriority> =
+  {
+    none: "A",
+    very_poor: "B",
+    reasonable: "C",
+    professional: "D",
+  };
+
+/** Origem do cálculo do commercial_score (auditoria). */
+export const COMMERCIAL_SCORED_BY = ["prefilter", "ai"] as const;
+export type CommercialScoredBy = (typeof COMMERCIAL_SCORED_BY)[number];
+
+/**
+ * Fator explicativo do commercial_score. Estruturado e auditável: cada sinal
+ * que entrou no cálculo (sem site, avaliações, WhatsApp, competitividade do
+ * mercado local, etc.) vira um item legível com o efeito no score.
+ */
+export type CommercialFactor = {
+  code: string;
+  label: string;
+  effect: "+" | "-" | "=";
+};
+
 export const AI_STATUS = ["pending", "running", "completed", "failed"] as const;
 export type AiStatus = (typeof AI_STATUS)[number];
 
@@ -165,6 +202,27 @@ export type ProspectAnalysis = {
   score: number;
   potential: AiPotential;
   confidence: AiConfidence;
+  /**
+   * Potencial comercial do negócio (0–100) — ranking da fila de oportunidades.
+   * Considera os sinais da própria empresa (site, avaliações, nota, WhatsApp,
+   * redes, categoria). O fator de competitividade do mercado local é somado
+   * fora da IA (regra determinística), para manter uma única fonte de verdade.
+   */
+  commercial_score: number;
+  /**
+   * Avaliação do website (só para empresas COM domínio próprio; a IA nunca
+   * classifica como "none" — ausência de site é resolvida no pré-filtro).
+   */
+  website_assessment: {
+    class: "very_poor" | "reasonable" | "professional";
+    reasons: string[];
+  };
+  /** Fatores que explicam o commercial_score da própria empresa. */
+  commercial_factors: Array<{
+    code: string;
+    label: string;
+    effect: "+" | "-" | "=";
+  }>;
   executive_summary: string;
   score_breakdown: Array<{
     dimension: string;
@@ -273,6 +331,12 @@ export type CompanyRow = Timestamps & {
   next_action_status: NextActionStatus | null;
   priority: Priority;
   score: number | null;
+  // Classificação comercial (migration 0011). Nulo = não classificado.
+  website_class: WebsiteClass | null;
+  commercial_score: number | null;
+  commercial_factors: CommercialFactor[];
+  commercial_scored_at: string | null;
+  commercial_scored_by: CommercialScoredBy | null;
   next_action_at: string | null;
   owner_id: string | null;
   source_run_id: string | null;

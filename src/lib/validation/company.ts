@@ -46,6 +46,7 @@ export type CreateNoteInput = z.infer<typeof createNoteInputSchema>;
 
 /** Filtros, ordenação e paginação da fila de oportunidades (Blueprint RF-17). */
 export const OPPORTUNITY_SORTS = [
+  "commercial",
   "priority",
   "score",
   "name",
@@ -61,7 +62,7 @@ export const opportunityFiltersSchema = z.object({
     .optional(),
   priority: priorityEnum.optional(),
   stage: pipelineStageEnum.optional(),
-  sort: z.enum(OPPORTUNITY_SORTS).default("priority"),
+  sort: z.enum(OPPORTUNITY_SORTS).default("commercial"),
   order: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

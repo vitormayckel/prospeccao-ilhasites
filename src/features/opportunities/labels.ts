@@ -7,6 +7,8 @@ import type {
   ApproachChannel,
   ContactRole,
   NextActionStatus,
+  WebsiteClass,
+  CommercialPriority,
 } from "@/types/domain";
 import type { AnalysisState } from "@/server/repositories/companies-repository";
 
@@ -22,6 +24,33 @@ export const priorityVariant: Record<Priority, BadgeProps["variant"]> = {
   normal: "outline",
   high: "warning",
   urgent: "danger",
+};
+
+// Classificação comercial (migration 0011) ------------------------------
+/** Classe do website. "none" = sem domínio próprio (sem site ou só rede). */
+export const websiteClassLabel: Record<WebsiteClass, string> = {
+  none: "Sem site",
+  very_poor: "Site muito ruim",
+  reasonable: "Site razoável",
+  professional: "Site profissional",
+};
+
+/** Prioridade comercial A/B/C/D. A = maior urgência; D = menor. */
+export const commercialPriorityLabel: Record<CommercialPriority, string> = {
+  A: "Prioridade A",
+  B: "Prioridade B",
+  C: "Prioridade C",
+  D: "Prioridade D",
+};
+
+export const commercialPriorityVariant: Record<
+  CommercialPriority,
+  BadgeProps["variant"]
+> = {
+  A: "danger", // maior urgência comercial → mais destaque
+  B: "warning",
+  C: "outline",
+  D: "neutral", // fora da fila principal
 };
 
 /**

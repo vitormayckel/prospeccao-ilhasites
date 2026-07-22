@@ -12,7 +12,15 @@ import {
 } from "@/server/services/analysis-snapshot";
 import { prospectAnalysisSchema } from "@/lib/validation/analysis";
 import { logAndSanitize, logInfo, newCorrelationId } from "@/lib/errors";
-import type { ProspectAnalysis } from "@/types/domain";
+import type { CompanyRow, ProspectAnalysis } from "@/types/domain";
+import {
+  hasOwnDomain,
+  classifyWithoutSite,
+  marketFactor,
+  buildMarket,
+  NEUTRAL_MARKET,
+  type MarketCompetitiveness,
+} from "@/server/services/commercial-classifier";
 
 // Máximo de tentativas: 1 + 2 retries (Blueprint §9.4/§9.6/8).
 const MAX_ATTEMPTS = 3;
@@ -99,12 +107,59 @@ export function createAnalysisService(deps: {
 }) {
   const { companies, aiAnalyses } = deps;
 
+  // Competitividade de mercado memoizada por (cidade|categoria) dentro da
+  // instância do serviço: o agregado não muda entre empresas do mesmo mercado
+  // no mesmo tick, então basta calcular uma vez.
+  const marketMemo = new Map<string, MarketCompetitiveness>();
+  async function resolveMarket(
+    company: CompanyRow,
+  ): Promise<MarketCompetitiveness> {
+    if (!company.city || !company.primary_category) return NEUTRAL_MARKET;
+    const key = `${company.city.toLowerCase()}|${company.primary_category}`;
+    const cached = marketMemo.get(key);
+    if (cached) return cached;
+    const counts = await companies.getMarketCompetitiveness(
+      company.city,
+      company.primary_category,
+    );
+    const market = buildMarket(counts.total, counts.withSite);
+    marketMemo.set(key, market);
+    return market;
+  }
+
   async function analyzeCompany(companyId: string): Promise<AnalyzeResult> {
     const detail = await companies.getDetail(companyId);
     if (!detail)
       return { ok: false, companyId, error: "Empresa não encontrada." };
 
     const { company, sources } = detail;
+    const market = await resolveMarket(company);
+
+    // ---- Pré-filtro determinístico (sem custo de IA) -------------------
+    // Empresa SEM domínio próprio (sem site ou apenas rede social) é
+    // Prioridade A: classificamos e pontuamos por regra e a mandamos direto
+    // para a fila de decisão, sem chamar o Anthropic. É daqui que vem a
+    // economia de chamadas.
+    if (!hasOwnDomain(company)) {
+      const result = classifyWithoutSite(company, market);
+      await companies.setCommercialClassification(companyId, {
+        websiteClass: result.websiteClass,
+        commercialScore: result.commercialScore,
+        factors: result.factors,
+        by: "prefilter",
+      });
+      await companies.updateReviewAndStage(companyId, {
+        reviewStatus: "pending_review",
+        pipelineStage: "analyzed",
+      });
+      logInfo("analysis.prefilterSkippedAi", {
+        companyId,
+        commercialScore: result.commercialScore,
+      });
+      return { ok: true, companyId, score: result.commercialScore };
+    }
+
+    // ---- Empresa COM domínio próprio → análise por IA ------------------
     const snapshot = buildCompanySnapshot(company, sources);
     const refs = snapshotRefs(snapshot);
 
@@ -162,6 +217,22 @@ export function createAnalysisService(deps: {
           reviewStatus: "pending_review",
           pipelineStage: "analyzed",
           score: parsed.data.score,
+        });
+
+        // Classificação comercial a partir da IA + fator de mercado (somado
+        // fora da IA, uniforme com o pré-filtro). commercial_score é o ranking
+        // da fila; o `score` acima é o analítico do breakdown.
+        const cls = parsed.data.website_assessment.class;
+        const mf = marketFactor(cls, market);
+        const commercialScore = Math.max(
+          0,
+          Math.min(100, parsed.data.commercial_score + mf.bonus),
+        );
+        await companies.setCommercialClassification(companyId, {
+          websiteClass: cls,
+          commercialScore,
+          factors: [...parsed.data.commercial_factors, mf.factor],
+          by: "ai",
         });
         return { ok: true, companyId, score: parsed.data.score };
       } catch (err) {

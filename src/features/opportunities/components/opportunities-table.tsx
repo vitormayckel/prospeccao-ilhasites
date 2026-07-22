@@ -14,26 +14,25 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { ScoreBadge } from "@/features/opportunities/components/score-badge";
 import { RowActions } from "@/features/opportunities/components/row-actions";
 import {
-  priorityLabel,
-  priorityVariant,
+  commercialPriorityVariant,
   reviewStatusLabel,
   reviewStatusTone,
   analysisStateLabel,
   analysisStateTone,
 } from "@/features/opportunities/labels";
-import type { Priority } from "@/types/domain";
+import { WEBSITE_CLASS_TO_PRIORITY } from "@/types/domain";
 import type { CompanyListRow } from "@/server/repositories/companies-repository";
 
-/** Só prioridade acionável recebe cor; o resto é texto discreto. */
-function PriorityCell({ priority }: { priority: Priority }) {
-  if (priority === "high" || priority === "urgent") {
-    return (
-      <Badge variant={priorityVariant[priority]}>
-        {priorityLabel[priority]}
-      </Badge>
-    );
+/**
+ * Prioridade comercial (A/B/C/D) derivada da classe do site. É o rótulo
+ * explicativo ao lado do commercial_score — não o critério de ordenação.
+ */
+function CommercialPriorityCell({ row }: { row: CompanyListRow }) {
+  if (!row.website_class) {
+    return <span className="text-text-muted">—</span>;
   }
-  return <span className="text-text-muted">{priorityLabel[priority]}</span>;
+  const priority = WEBSITE_CLASS_TO_PRIORITY[row.website_class];
+  return <Badge variant={commercialPriorityVariant[priority]}>{priority}</Badge>;
 }
 
 export function OpportunitiesTable({ rows }: { rows: CompanyListRow[] }) {
@@ -56,7 +55,7 @@ export function OpportunitiesTable({ rows }: { rows: CompanyListRow[] }) {
           <TableRow className="hover:bg-transparent">
             <TableHead>Empresa</TableHead>
             <TableHead className="w-24">Score</TableHead>
-            <TableHead className="w-32">Prioridade</TableHead>
+            <TableHead className="w-28">Prioridade</TableHead>
             <TableHead className="w-40">Estado</TableHead>
             <TableHead className="w-12" />
           </TableRow>
@@ -84,14 +83,15 @@ export function OpportunitiesTable({ rows }: { rows: CompanyListRow[] }) {
                   </p>
                 </TableCell>
                 <TableCell>
-                  {row.score === null ? (
+                  {/* Score comercial (0–100): ranking primário da fila. */}
+                  {row.commercial_score === null ? (
                     <span className="text-text-muted">—</span>
                   ) : (
-                    <ScoreBadge score={row.score} />
+                    <ScoreBadge score={row.commercial_score} />
                   )}
                 </TableCell>
                 <TableCell>
-                  <PriorityCell priority={row.priority} />
+                  <CommercialPriorityCell row={row} />
                 </TableCell>
                 <TableCell>
                   {/* O estado fino da análise tem precedência: evita que um

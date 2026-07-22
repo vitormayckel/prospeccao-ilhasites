@@ -15,6 +15,7 @@ import { AnalyzeButton } from "@/features/opportunities/components/detail/analyz
 import { AnalysisPanel } from "@/features/opportunities/components/detail/analysis-panel";
 import { Timeline } from "@/features/opportunities/components/detail/timeline";
 import { CommercialControls } from "@/features/opportunities/components/detail/commercial-controls";
+import { CommercialClassification } from "@/features/opportunities/components/detail/commercial-classification";
 import { buildTimeline } from "@/features/opportunities/lib/build-timeline";
 import { ContactFlow } from "@/features/opportunities/components/detail/contact-flow";
 import {
@@ -238,6 +239,16 @@ export default async function OpportunityDetailPage({
                   value={`${company.rating} (${company.reviews_count ?? 0})`}
                 />
               ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Classificação comercial — score, prioridade e fatores (0011) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Classificação comercial</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CommercialClassification company={company} />
             </CardContent>
           </Card>
 

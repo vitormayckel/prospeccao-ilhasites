@@ -200,12 +200,47 @@ function buildAnalysis(snapshot: CompanySnapshot): ProspectAnalysis {
       evidence_refs: refFor(snapshot, "field:whatsapp"),
     });
 
+  // Classificação do website (fixture: heurística simples; a empresa tem site).
+  // Sem fetch real, aproxima pela reputação/completude — nunca "profissional"
+  // por padrão, para não auto-despriorizar sem evidência.
+  const websiteClass: "very_poor" | "reasonable" | "professional" =
+    rating != null && rating >= 4.5 && reviews > 100 ? "professional" : "reasonable";
+  const commercial_factors = [
+    {
+      code: "site_quality",
+      label:
+        websiteClass === "professional"
+          ? "Site aparenta boa maturidade (heurística)"
+          : "Site presente, qualidade a confirmar (heurística)",
+      effect: (websiteClass === "professional" ? "-" : "=") as "+" | "-" | "=",
+    },
+    {
+      code: "reviews",
+      label: `${reviews} avaliações públicas`,
+      effect: (reviews > 20 ? "+" : "=") as "+" | "-" | "=",
+    },
+    {
+      code: "whatsapp",
+      label: whatsappProbable ? "WhatsApp provável" : "WhatsApp não verificado",
+      effect: (whatsappProbable ? "+" : "=") as "+" | "-" | "=",
+    },
+  ];
+
   return {
     version: "1.0",
     recommendation,
     score,
     potential,
     confidence,
+    // Score comercial (fixture): reaproveita a heurística do score analítico.
+    commercial_score: score,
+    website_assessment: {
+      class: websiteClass,
+      reasons: [
+        "Classificação heurística (provedor fixture, sem verificação real do site)",
+      ],
+    },
+    commercial_factors,
     executive_summary: hasWebsite
       ? `${f.name ?? "O negócio"} já tem presença digital; o fit depende de um diferencial claro. Score ${score}/100.`
       : `${f.name ?? "O negócio"} não tem website localizado e ${hasPhone ? "tem contato direto" : "precisa de contato"}. Boa aderência à oferta. Score ${score}/100.`,

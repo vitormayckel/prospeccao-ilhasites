@@ -8,7 +8,7 @@ import { createAnthropicAnalysisProvider } from "@/server/providers/analysis/ant
 export * from "@/server/providers/analysis/types";
 
 /** Versão do prompt/contrato — persistida em ai_analyses.prompt_version. */
-export const PROMPT_VERSION = "2026-07-14.1";
+export const PROMPT_VERSION = "2026-07-22.1";
 
 /**
  * Resolve o provedor de análise.
